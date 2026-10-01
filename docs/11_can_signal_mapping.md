@@ -78,8 +78,8 @@
 
 | 항목 | 기존 설계 | DB 실제 | 조치 |
 | --- | --- | --- | --- |
-| **상태 발행 코드** | 0:S0 ~ 6:S6 | **1:S0 ~ 7:S6** (0=Invalid) | 발행 시 **+1 오프셋** 또는 설계값을 DB에 맞춤 |
-| **AEBS 입력** | `ttc_s < 0.8s` | CC/VC 가 판정한 **AEBS 플래그** | 가드를 `aebs_flag` 로 변경 |
+| **상태 발행 코드** ✅ | 0:S0 ~ 6:S6 | **1:S0 ~ 7:S6** (0=Invalid) | ✅ **해소(C21)**: enum을 DB에 맞춤(S0=1..S6=7, INIT=Invalid=0) |
+| **AEBS 입력** ✅ | `ttc_s < 0.8s` | CC/VC 가 판정한 **AEBS 플래그** | ✅ **해소(C22)**: 가드를 `aebs_flag` 로 변경 |
 | **E-Stop** | 단일 `estop_active` | **CC(AA)+VC(AB) 2경로** + HW | OR 중재 전처리 |
 | **Heartbeat** | `heartbeat_age_ms` | **AliveCounter(0~15 롤오버)** | 카운터 정체 → age 환산 |
 | **통신레벨** | `vc_net_level` | VC + **CC 도 Net_Level 있음** | 둘 다 반영? (degradation은 VC 기준) |
