@@ -45,15 +45,15 @@ DB는 `heartbeat_age_ms`를 직접 주지 않음. 대신 **AliveCounter(0~15 롤
 
 **중재 대상(= 무엇을 중재하나):** "degradation/stop 판정에 쓸 **단일 net_level** 을 두 값에서 어떻게 뽑을까".
 
-**중재 규칙 — ✅ 확정 (Issue #4):** VC·CC **두 데이터를 모두 활용**해 Chassis uC 가 단일 `net_level` 산출.
+**규칙 — ✅ 확정 (Issue #4 + C18 종결):** VC·CC **두 데이터를 모두 활용**해 산출한 `net_level` 을
+**외부(VC/CC 측)에서 계산**하여 CAN 으로 전달한다. **Chassis uC 는 산출식을 돌리지 않고 수신값을 그대로 사용**.
 ```
-net_level = f(VC_Net_Level, CC_Net_Level)   % 두 값 모두 입력. 산출식은 Ideation(C18)에서 상세화
-vc_net_level(Stateflow 입력) = net_level
+% 외부에서 VC_Net_Level, CC_Net_Level 을 종합한 결과가 CAN 으로 들어옴
+vc_net_level(Stateflow 입력) = 수신한 net_level   % 범위검사(0~10)만 수행
 ```
-- **확정**: VC 단독이 아니라 **둘 다 활용**. 산출 후 Degradation/Stop 판정.
+- **확정**: 산출 로직은 **외부 소관**(C18 종결 — Chassis uC 내부 Ideation 불필요).
+- Chassis uC 전처리는 **범위검사(0~10)** 와 유효성만 담당.
 - 판정: 0~1 → S5(Stop), 2~4 → S3_Degraded, 5~10 → S3_Normal (경계 확정값).
-- 전처리는 두 신호(`vc_net_level`, `cc_net_level`)를 모두 Stateflow 앞단에 제공하고,
-  **산출식(가중/min/함수)의 상세는 C18(VC_Net_Level 판단로직 Ideation)**에서 확정.
 
 ### 1.5 E-Stop 다중소스 중재 (HW + CC + VC)
 E-Stop 은 **3경로**: HW(하드와이어) + `E_STOP_AA`(CC) + `E_STOP_AB`(VC).
@@ -108,13 +108,20 @@ last_mc = received_mc
 if mc_fail_cnt >= 10:  stale = true   % ★ 10회 연속 실패 → 메시지 stale → 유효성 false
 ```
 
-**(2) CRC(체크섬) — ✅ 확정 (Issue #6): CRC-8 SAE J1850**
+**(2) CRC(체크섬) — ✅ 확정 (Issue #6): CRC-8 H2F (J1939), 검증된 함수 제공**
 ```
-% CRC-8-SAE J1850: poly 0x1D, init 0xFF, xorout 0xFF, refin/refout = false
-computed = crc8_j1850( data_bytes_except_crc )   % CRC 필드 제외한 데이터
-crc_ok = (computed == received_crc)
+% src/CalcCRCJ1939.m — 사용자 제공·검증 완료.
+% CRC-8 H2F 룩업 테이블, init 0xFF, 최종 XOR 0xFF.
+% 계산 입력 순서(= 바이트 범위):
+%   Data Byte 2 ~ Data Byte 8  (Data Byte 1 = CRC 자리, 제외)
+%   + Source Address
+%   + PGN LSB + PGN 2nd byte + PGN MSB   (29-bit CAN ID 에서 추출)
+computed = CalcCRCJ1939(msg_id, msg_data, source_address)
+crc_ok = (computed == received_crc)   % received_crc = Data Byte 1
 ```
-- ⚠️ 남은 세부: CRC 계산 **바이트 범위**(Data ID 포함 여부). AUTOSAR E2E면 Data ID 포함 — 통신규격 확인.
+- **바이트 범위 확정(이전 TBD 해소)**: 데이터뿐 아니라 **Source Address + PGN** 까지 CRC에 포함.
+  → J1939 PDU1(PF<240)은 PGN_LSB=0, PDU2(PF≥240)는 PGN_LSB=PS. (함수가 자동 처리)
+- 송신 시 Data Byte 1 에 CRC 를 넣고, 수신 시 동일 함수로 재계산해 비교.
 
 **(3) 종합 유효성**
 ```
@@ -165,6 +172,6 @@ CAN Unpack 은 DBC 로 자동 생성 가능 → **DB를 DBC(.dbc)로 export** �
 | --- | --- | --- | --- |
 | ~~C21~~ ✅ | 상태 발행코드 — DB Value Table 매칭 | **해소** — S0=1..S6=7, Invalid=0 | 설계 통일 |
 | ~~C22~~ ✅ | AEBS: TTC → 플래그 | **해소** — 가드 `aebs_flag` 로 전환 | 설계 반영 |
-| ~~C19~~ ✅ | CC/VC net level 중재 | **해소(#4)** — VC·CC 둘 다 활용해 net_level 산출(산출식은 C18) | 시스템 |
+| ~~C19~~ ✅ | CC/VC net level 중재 | **해소(#4)** — VC·CC 종합 산출은 **외부에서 수행**, Chassis uC는 수신(C18 종결) | 외부 |
 | ~~C20~~ ✅ | 모드요청 CC/VC 중재 | **해소(#5)** — CC 우선, 불일치 시 운영자 점검요청(`system_check_request`) | 「원격/수동 전환」 |
-| 🔶 C23 | CRC/MC E2E 검증 | **거의 해소(#6)** — CRC-8 J1850, MC 10회 실패 stale. 남음: CRC **바이트 범위**(Data ID 포함?) | 통신/안전 |
+| ~~C23~~ ✅ | CRC/MC E2E 검증 | **해소(#6)** — CRC-8 H2F(J1939), 범위=Data2~8+SA+PGN, MC 10회 실패 stale. `src/CalcCRCJ1939.m` 검증완료 | 통신/안전 |

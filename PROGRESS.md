@@ -33,7 +33,7 @@
 - Chassis uC ↔ FSM uC: **S6만 공유**(점선). 하위모듈은 상태 읽기만+천이요청/고장보고.
 - **S3 Degradation (신규)**: S3=서브상태 Normal/Degraded. `vc_net_level`(CAN 0~10) 기준 —
   0~1=S5(Stop), 2~4=Degraded(**속도제한 10kph**+LED점멸), 5~10=Normal. 감도 호전 시 해제.
-  LED 점멸주기 TBD, 판단로직은 Ideation 예정(C18).
+  LED 점멸주기 TBD. net_level 산출은 외부(VC/CC) 수신 — Chassis uC 내부 산출 없음(C18 종결).
 
 ## 명칭 불일치 (해소: 다이어그램=정본, 코드식별자 매핑 병기)
 S2 Remote-Armed=`REMOTE_READY` / S4 AEBS-Override=`AEBS` / S5 Comm-Loss Brake=`SAFE_STOP`.
@@ -65,5 +65,5 @@ S2 Remote-Armed=`REMOTE_READY` / S4 AEBS-Override=`AEBS` / S5 Comm-Loss Brake=`S
 ## 다음 액션
 - 사용자: S3 서브상태(Normal/Degraded) 직접 작업.
 - Issue #2~#6 확정 → PR 브랜치 업데이트.
-- VC_Net_Level 판단로직 Ideation(C18).
+- (C18 종결: net_level은 외부 산출값 수신)
 - 자료 추가 시 → `05_consistency_check.md` 틀에 누적 대조.

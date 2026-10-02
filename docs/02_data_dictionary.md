@@ -39,7 +39,7 @@
 | `heartbeat_ok` | boolean | 0/1 | **원격(명령) Heartbeat** 정상 수신 — Control Computer | Control Computer/RS |
 | `heartbeat_age_ms` | uint16 | ms | 마지막 유효 원격 Heartbeat 경과시간 → S5 판정 | 통신 스택 |
 | `video_hb_ok` | boolean | 0/1 | **영상 Heartbeat** 정상 수신 — Video Streaming Computer. 상실 시 **경고만(상태천이 없음)** | Video Streaming Computer |
-| `vc_net_level` | uint8 | 0~10 | **통신 네트워크 레벨** (CAN). 0~1=Stop(S5), 2~4=Degradation(S3_Degraded), 5~10=정상(S3_Normal) ✅확정 | VC(영상컴퓨터)/CAN. 판단로직 Ideation 예정(C18) |
+| `vc_net_level` | uint8 | 0~10 | **통신 네트워크 레벨** (CAN). 0~1=Stop(S5), 2~4=Degradation(S3_Degraded), 5~10=정상(S3_Normal) ✅확정 | VC(영상컴퓨터)/CAN. **외부 산출값 수신** — Chassis uC 내부 산출 없음(C18 종결) |
 | `ttc_s` | single | s | Time-To-Collision | AEBS (SRS-SYS-003) |
 | `fault_critical_confirmed` | boolean | 0/1 | **치명 고장 확정** 신호 | 「진단」 §4 |
 | `fault_suspect` | boolean | 0/1 | 치명 고장 **의심**(상태 불변, 명령제한) | 「진단」 §4 |
@@ -117,7 +117,7 @@
 | `DEGRADED_SPEED_LIMIT` | 10 | km/h | Degradation 최대속도 ✅확정 |
 | `DEGRADED_LED_BLINK_HZ` | `[TBD]` | Hz | ⚠️ **TBD** — LED 점멸 주기 |
 | `MC_STALE_FAIL_COUNT` | 10 | 회 | MC 연속 실패 시 stale 판정 ✅확정(#6) |
-| `CRC_ALGORITHM` | CRC-8 SAE J1850 | — | poly 0x1D, init 0xFF, xorout 0xFF ✅확정(#6) |
+| `CRC_ALGORITHM` | CRC-8 H2F (J1939) | — | 룩업테이블, init 0xFF, XOR 0xFF. 범위=Data2~8+SA+PGN. `src/CalcCRCJ1939.m` ✅확정(#6) |
 | `MODE_PRIORITY` | CC > VC | — | 모드요청 중재 우선순위 ✅확정(#5) |
 | `LOG_DEPTH_N` | `[TBD]` | 개 | 천이 이력 깊이 (SRS-SYS-040) |
 
