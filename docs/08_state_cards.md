@@ -71,14 +71,14 @@ IG-OFF. 상시전원 대상만 생존하고 나머지는 무여자. 암전류 �
 
 | To | 조건 (Guard) | 우선순위 | 비고 |
 | --- | --- | --- | --- |
-| S6 | `fault_critical_confirmed \|\| fault_threatens_control` | 1 | 유인 S6 — 최대제동 **금지**, 원격잠금+경고 ⚠️정책 TBD(§6-2) |
+| S6 | `fault_critical_confirmed \|\| fault_threatens_control` | 1 | 유인 S6 — **최대제동 금지 + 원격기능 잠금 + 원격모드 진입불가** ✅C03 |
 | S4 | `ttc_s < AEBS_BRAKE_TTC_S` | 2 | AEBS 개입 (T11). 직전상태=S1 보관 |
 | S2 | `interlock_ok(6조건 AND) && mode_req == REQ_TO_S2` | 3 | 원격 진입 (T05). 6조건: `arm_*` |
 | S0 | `ig_key == IG_OFF` | 4 | IG-OFF (T04). S0 진입은 S1에서만 |
 
 **금지 천이:** (해당 없음 — S1 은 S3 로 직접 못 감, S2 경유)
 
-**미해결:** 유인 S6 대응정책(C03/M04), INIT→S1 실패처리(C08).
+**미해결:** INIT→S1 실패처리(C08). (C03 유인 S6 정책 ✅해소)
 
 ---
 
@@ -224,7 +224,7 @@ Heartbeat(명령 링크) 타임아웃으로 통신 단절 판정. 비상 제동 
 | Brake Actuator (BA) | **최대 제동 유지** |
 | Gear (GS/GA) | 마지막 위치 유지 (SRS-SYS-028) |
 | Accel Control Unit | **0 강제** |
-| Steering Control Unit (SU) | 마지막 각 유지 ⚠️ **Q-76 종속** |
+| Steering Control Unit (SU) | **홀드 — EPS 제어 안 함, 내력 미발생** ✅C06 |
 | FSM uC | 영향 없음 |
 | 발행 | `veh_state_code = 5`, S4+S5 동시 시 `dual_s4s5_flag` |
 
@@ -244,7 +244,7 @@ Heartbeat(명령 링크) 타임아웃으로 통신 단절 판정. 비상 제동 
 
 **금지 천이:** `S5 → S3` 직접 **금지** (반드시 S2 경유, §7 · SRS-SYS-023).
 
-**미해결:** Q-76 조향(C06), STANDSTILL_SPEED(C05).
+**미해결:** STANDSTILL_SPEED(C05). (C06 Q-76 ✅해소)
 
 ---
 
@@ -258,10 +258,10 @@ Heartbeat(명령 링크) 타임아웃으로 통신 단절 판정. 비상 제동 
 
 | 서브시스템 | 동작 |
 | --- | --- |
-| Brake Actuator (BA) | **최대 제동 후 유지** ⚠️ **유인(S1) 진입 시 차등** — 최대제동 금지(§6-2) |
+| Brake Actuator (BA) | **최대 제동 후 유지** — 유인(S1) 진입 시: **최대제동 금지 + 원격기능 잠금 + 원격모드 진입불가** ✅C03 |
 | Gear (GS/GA) | 변경 금지, 현 위치 유지 |
 | Accel Control Unit | **0 강제** |
-| Steering Control Unit (SU) | 마지막 각 유지 ⚠️ **Q-76 종속** |
+| Steering Control Unit (SU) | **홀드 — EPS 제어 안 함, 내력 미발생** ✅C06 |
 | FSM uC | 정지. **S6 공유**(Chassis uC → FSM uC) |
 | 발행 | `veh_state_code = 6`, `remote_cmd_lock = true` |
 
@@ -270,7 +270,7 @@ Heartbeat(명령 링크) 타임아웃으로 통신 단절 판정. 비상 제동 
 | From | 조건 (Guard) | 비고 |
 | --- | --- | --- |
 | INIT | `fault_critical_confirmed` | 자기진단 중 치명고장 (T03) |
-| S1 (유인) | `fault_critical_confirmed \|\| fault_threatens_control` | T14 — 최대제동 **금지** ⚠️정책 TBD |
+| S1 (유인) | `fault_critical_confirmed \|\| fault_threatens_control` | T14 — **최대제동 금지 + 원격기능 잠금 + 원격모드 진입불가** ✅C03 |
 | S2/S3/S4/S5 (무인) | `fault_critical_confirmed` | T13 — 최대제동 후 유지 |
 
 **이탈 조건 (나가는 천이):**
@@ -281,7 +281,7 @@ Heartbeat(명령 링크) 타임아웃으로 통신 단절 판정. 비상 제동 
 
 **금지 천이:** `S6` 에서 **원격 이탈 불가** (§7). 물리적 개입(IG-OFF 재기동) 필수.
 
-**미해결:** 유인 S6 정책(C03/M04), 디바운스 N·T(C04), Q-76(C06), DTC클리어(C10), FSM uC S6 공유 프로토콜(C14).
+**미해결:** 디바운스 N·T(C04), DTC클리어(C10). (C03·C06·C14 ✅해소)
 
 ---
 
