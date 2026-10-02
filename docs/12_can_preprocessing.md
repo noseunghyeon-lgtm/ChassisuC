@@ -108,13 +108,20 @@ last_mc = received_mc
 if mc_fail_cnt >= 10:  stale = true   % ★ 10회 연속 실패 → 메시지 stale → 유효성 false
 ```
 
-**(2) CRC(체크섬) — ✅ 확정 (Issue #6): CRC-8 SAE J1850**
+**(2) CRC(체크섬) — ✅ 확정 (Issue #6): CRC-8 H2F (J1939), 검증된 함수 제공**
 ```
-% CRC-8-SAE J1850: poly 0x1D, init 0xFF, xorout 0xFF, refin/refout = false
-computed = crc8_j1850( data_bytes_except_crc )   % CRC 필드 제외한 데이터
-crc_ok = (computed == received_crc)
+% src/CalcCRCJ1939.m — 사용자 제공·검증 완료.
+% CRC-8 H2F 룩업 테이블, init 0xFF, 최종 XOR 0xFF.
+% 계산 입력 순서(= 바이트 범위):
+%   Data Byte 2 ~ Data Byte 8  (Data Byte 1 = CRC 자리, 제외)
+%   + Source Address
+%   + PGN LSB + PGN 2nd byte + PGN MSB   (29-bit CAN ID 에서 추출)
+computed = CalcCRCJ1939(msg_id, msg_data, source_address)
+crc_ok = (computed == received_crc)   % received_crc = Data Byte 1
 ```
-- ⚠️ 남은 세부: CRC 계산 **바이트 범위**(Data ID 포함 여부). AUTOSAR E2E면 Data ID 포함 — 통신규격 확인.
+- **바이트 범위 확정(이전 TBD 해소)**: 데이터뿐 아니라 **Source Address + PGN** 까지 CRC에 포함.
+  → J1939 PDU1(PF<240)은 PGN_LSB=0, PDU2(PF≥240)는 PGN_LSB=PS. (함수가 자동 처리)
+- 송신 시 Data Byte 1 에 CRC 를 넣고, 수신 시 동일 함수로 재계산해 비교.
 
 **(3) 종합 유효성**
 ```
@@ -167,4 +174,4 @@ CAN Unpack 은 DBC 로 자동 생성 가능 → **DB를 DBC(.dbc)로 export** �
 | ~~C22~~ ✅ | AEBS: TTC → 플래그 | **해소** — 가드 `aebs_flag` 로 전환 | 설계 반영 |
 | ~~C19~~ ✅ | CC/VC net level 중재 | **해소(#4)** — VC·CC 둘 다 활용해 net_level 산출(산출식은 C18) | 시스템 |
 | ~~C20~~ ✅ | 모드요청 CC/VC 중재 | **해소(#5)** — CC 우선, 불일치 시 운영자 점검요청(`system_check_request`) | 「원격/수동 전환」 |
-| 🔶 C23 | CRC/MC E2E 검증 | **거의 해소(#6)** — CRC-8 J1850, MC 10회 실패 stale. 남음: CRC **바이트 범위**(Data ID 포함?) | 통신/안전 |
+| ~~C23~~ ✅ | CRC/MC E2E 검증 | **해소(#6)** — CRC-8 H2F(J1939), 범위=Data2~8+SA+PGN, MC 10회 실패 stale. `src/CalcCRCJ1939.m` 검증완료 | 통신/안전 |
