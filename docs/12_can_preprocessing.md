@@ -45,18 +45,15 @@ DB는 `heartbeat_age_ms`를 직접 주지 않음. 대신 **AliveCounter(0~15 롤
 
 **중재 대상(= 무엇을 중재하나):** "degradation/stop 판정에 쓸 **단일 net_level** 을 두 값에서 어떻게 뽑을까".
 
-**제안 중재 규칙 (보수적 — min 채택):**
+**중재 규칙 — ✅ 확정 (Issue #4):** VC·CC **두 데이터를 모두 활용**해 Chassis uC 가 단일 `net_level` 산출.
 ```
-net_level_eff = min(VC_Net_Level, CC_Net_Level)   % 둘 중 나쁜 쪽 기준(안전측)
-  단, 어느 한쪽이 0(No Link)이면 그 링크는 두절로 간주
-vc_net_level(Stateflow 입력) = net_level_eff
+net_level = f(VC_Net_Level, CC_Net_Level)   % 두 값 모두 입력. 산출식은 Ideation(C18)에서 상세화
+vc_net_level(Stateflow 입력) = net_level
 ```
-- 근거: 원격주행은 **명령(CC)과 영상(VC)이 모두** 건강해야 안전. 더 나쁜 쪽이 성능을 제한해야 함.
-- 0~1 → S5(Stop), 2~4 → S3_Degraded, 5~10 → S3_Normal (경계는 확정값).
-- ⚠️ **확인 필요**: min 채택이 맞는지, 아니면 VC 단독 기준이고 CC는 모니터만인지 — 사용자 확정(C19).
-  - 대안 A: `min(VC,CC)` (위, 보수적)
-  - 대안 B: VC 단독(명령 링크 CC 상실은 **S5 heartbeat 경로**로 별도 처리) ← 사용자가 "영상=VC" 라 했으므로 유력
-  - 대안 C: 가중/우선순위
+- **확정**: VC 단독이 아니라 **둘 다 활용**. 산출 후 Degradation/Stop 판정.
+- 판정: 0~1 → S5(Stop), 2~4 → S3_Degraded, 5~10 → S3_Normal (경계 확정값).
+- 전처리는 두 신호(`vc_net_level`, `cc_net_level`)를 모두 Stateflow 앞단에 제공하고,
+  **산출식(가중/min/함수)의 상세는 C18(VC_Net_Level 판단로직 Ideation)**에서 확정.
 
 ### 1.5 E-Stop 다중소스 중재 (HW + CC + VC)
 E-Stop 은 **3경로**: HW(하드와이어) + `E_STOP_AA`(CC) + `E_STOP_AB`(VC).
@@ -75,17 +72,20 @@ TTC 원시값이 아니라 CC/VC 가 판정한 **AEBS 플래그**로 수신:
 **중재 대상(= 무엇을 중재하나):** CC와 VC가 **서로 다른 모드를 요청**할 때 어느 것을 `mode_req`로 삼을지.
 가능한 불일치: (CC=RS, VC=Manual), (한쪽 Invalid), (둘 다 RS) 등.
 
-**제안 중재 규칙 (안전측 — 원격진입은 합의 필요, 해제는 단독 가능):**
+**중재 규칙 — ✅ 확정 (Issue #5): CC 우선, 불일치 시 운영자 점검 요청.**
 ```
-% 원격 진입(→RS)은 양쪽 합의 필요(오작동 방지), 수동 복귀(→Manual)는 한쪽만으로도 허용(안전측)
-if (CC==Manual) or (VC==Manual):   mode_req = TO_S1   % 한쪽이라도 Manual 요구 → 수동 복귀
-elif (CC==RS) and (VC==RS):        mode_req = TO_S2   % 둘 다 RS 여야 원격 진입
-else:                              mode_req = NONE    % 불일치/Invalid → 요청 없음(현 상태 유지)
+% CC 가 VC 보다 높은 priority
+if (CC == VC):                     mode_req = map(CC)     % 일치 → 그대로 채택
+elif (CC != Invalid):              mode_req = map(CC)     % 불일치 → CC 우선 채택
+                                   raise system_check_request   % + 운영자에게 System 점검 요청
+else:                              mode_req = map(VC)     % CC Invalid 시에만 VC
+% map: 1→TO_S1(Manual), 2→TO_S2(RS), 0(Invalid)→NONE
 ```
-- 근거: **원격 진입은 보수적으로(둘 다 동의)**, **수동 복귀는 적극적으로(하나만 요구해도)** — 안전 방향.
-- Invalid(0)는 미수신 취급 → NONE.
-- ⚠️ **확인 필요**: CC/VC 중 **마스터 지정**이 있는지(예: CC가 주, VC는 보조). 있으면 규칙 단순화(C20).
+- **확정**: CC 우선순위 높음. **서로 다른 모드 요청 시 → 운영자에게 시스템 점검 요청**(`system_check_request` 출력 신규).
+- Invalid(0)는 미수신 취급.
 - DB Op_Mode는 2단계(Manual/RS)뿐 → **RS 내부 S2/S3 구분은 Chassis uC 내부 상태**(조작기 중립·첫 유효명령)가 결정.
+
+> 신규 출력 `system_check_request`(boolean) — CC/VC 모드 불일치 시 운영자(RS HMI) 알림. 상태천이 없음(§7.1 그룹).
 
 ### 1.8 CRC / Message Counter 검증 (E2E 보호) — C23 알고리즘
 
@@ -98,23 +98,23 @@ else:                              mode_req = NONE    % 불일치/Invalid → �
 
 **검증 알고리즘 (프레임 수신 시, 전처리 단계):**
 
-**(1) MC(Message Counter) 연속성**
+**(1) MC(Message Counter) 연속성 — ✅ 확정 (Issue #6): 10회 연속 실패 시 stale**
 ```
 expected_mc = (last_mc + 1) mod 16
-if received_mc == expected_mc:        mc_ok = true
-elif received_mc == last_mc:          mc_ok = false  % 중복/정체(freshness 실패)
-else:                                 mc_ok = false  % 누락/점프
+if received_mc == expected_mc:        mc_ok = true;  mc_fail_cnt = 0
+elif received_mc == last_mc:          mc_ok = false; mc_fail_cnt++   % 중복/정체(freshness 실패)
+else:                                 mc_ok = false; mc_fail_cnt++   % 누락/점프
 last_mc = received_mc
-% N회 연속 실패 시 해당 메시지 "stale" → 유효성 false
+if mc_fail_cnt >= 10:  stale = true   % ★ 10회 연속 실패 → 메시지 stale → 유효성 false
 ```
 
-**(2) CRC(체크섬) — AUTOSAR E2E Profile 계열 권장**
+**(2) CRC(체크섬) — ✅ 확정 (Issue #6): CRC-8 SAE J1850**
 ```
-% 8bit CRC. 다항식은 DB/통신규격 확정 필요(아래 TBD).
-% 권장: CRC-8-SAE J1850 (poly 0x1D, init 0xFF, xorout 0xFF) — AUTOSAR E2E Profile 1/2 계열
-computed = crc8( data_bytes_except_crc, poly=0x1D, init=0xFF )
+% CRC-8-SAE J1850: poly 0x1D, init 0xFF, xorout 0xFF, refin/refout = false
+computed = crc8_j1850( data_bytes_except_crc )   % CRC 필드 제외한 데이터
 crc_ok = (computed == received_crc)
 ```
+- ⚠️ 남은 세부: CRC 계산 **바이트 범위**(Data ID 포함 여부). AUTOSAR E2E면 Data ID 포함 — 통신규격 확인.
 
 **(3) 종합 유효성**
 ```
@@ -163,8 +163,8 @@ CAN Unpack 은 DBC 로 자동 생성 가능 → **DB를 DBC(.dbc)로 export** �
 
 | ID | 항목 | 상태 | 소관 |
 | --- | --- | --- | --- |
-| ~~C21~~ ✅ | 상태 발행코드 — DB Value Table 매칭 | **해소** — S0=1..S6=7, Invalid=0 (02 §1 반영) | 설계 통일 |
-| ~~C22~~ ✅ | AEBS: TTC → 플래그 | **해소** — 가드 `aebs_flag` 로 전환 (스크립트 반영) | 설계 반영 |
-| 🔶 C19 | CC/VC net level 중재 | 설계안 제시(min vs VC단독) — **방식 확정 필요** | 시스템 |
-| 🔶 C20 | 모드요청 CC/VC 2경로 중재 | 설계안 제시(진입=합의, 복귀=단독) — **마스터 지정 확인** | 「원격/수동 전환」 |
-| 🔶 C23 | CRC/MC E2E 검증 | 알고리즘 제시(CRC-8 J1850, MC 순환) — **다항식/범위/임계 확정** | 통신/안전 |
+| ~~C21~~ ✅ | 상태 발행코드 — DB Value Table 매칭 | **해소** — S0=1..S6=7, Invalid=0 | 설계 통일 |
+| ~~C22~~ ✅ | AEBS: TTC → 플래그 | **해소** — 가드 `aebs_flag` 로 전환 | 설계 반영 |
+| ~~C19~~ ✅ | CC/VC net level 중재 | **해소(#4)** — VC·CC 둘 다 활용해 net_level 산출(산출식은 C18) | 시스템 |
+| ~~C20~~ ✅ | 모드요청 CC/VC 중재 | **해소(#5)** — CC 우선, 불일치 시 운영자 점검요청(`system_check_request`) | 「원격/수동 전환」 |
+| 🔶 C23 | CRC/MC E2E 검증 | **거의 해소(#6)** — CRC-8 J1850, MC 10회 실패 stale. 남음: CRC **바이트 범위**(Data ID 포함?) | 통신/안전 |

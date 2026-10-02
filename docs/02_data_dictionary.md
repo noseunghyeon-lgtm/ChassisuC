@@ -80,6 +80,7 @@
 | `speed_limit_active` | boolean | **속도 제한 활성** (S3_Degraded) | → 가속/제동 제어 |
 | `speed_limit_value` | single | 제한 속도값 = **10 km/h** (`DEGRADED_SPEED_LIMIT`) ✅확정 | Degradation 시 적용 |
 | `degraded_led_blink` | boolean | **Degradation LED 점멸** → 원격 스테이션 / 내부 LED | → RS HMI / 차량 LED |
+| `system_check_request` | boolean | **CC/VC 모드 불일치 → 운영자 시스템 점검 요청** (상태천이 없음) | → RS HMI (C20/#5) |
 
 ---
 
@@ -115,6 +116,9 @@
 | `NET_LEVEL_NORMAL_MIN` | 5 | — | Net Level 5~10 → 정상(S3_Normal) ✅확정 |
 | `DEGRADED_SPEED_LIMIT` | 10 | km/h | Degradation 최대속도 ✅확정 |
 | `DEGRADED_LED_BLINK_HZ` | `[TBD]` | Hz | ⚠️ **TBD** — LED 점멸 주기 |
+| `MC_STALE_FAIL_COUNT` | 10 | 회 | MC 연속 실패 시 stale 판정 ✅확정(#6) |
+| `CRC_ALGORITHM` | CRC-8 SAE J1850 | — | poly 0x1D, init 0xFF, xorout 0xFF ✅확정(#6) |
+| `MODE_PRIORITY` | CC > VC | — | 모드요청 중재 우선순위 ✅확정(#5) |
 | `LOG_DEPTH_N` | `[TBD]` | 개 | 천이 이력 깊이 (SRS-SYS-040) |
 
 ### 5.1 추가 미해결 (이번 자료 반영)

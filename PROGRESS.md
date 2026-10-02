@@ -55,7 +55,15 @@ S2 Remote-Armed=`REMOTE_READY` / S4 AEBS-Override=`AEBS` / S5 Comm-Loss Brake=`S
   **S3 = 빈 composite** (서브상태 Normal/Degraded는 사용자 작업). TBD는 placeholder.
   정적검토 OK(참조 식별자 전부 정의, 상태별 이탈 전이 수 = 상태카드 일치). MATLAB 실행검증은 미수행.
 
+## GitHub (noseunghyeon-lgtm/ChassisuC)
+- PR #1: design/chassis-controller-stateflow → main (설계 베이스라인, 열어두고 리뷰)
+- DB_ChassisuC.xlsx 저장소에 있음. tools/parse_xlsx.py 로 파싱(stdlib).
+- 리뷰 가이드: docs/REVIEW_CHECKLIST.md
+- 핵심 미해결 Issue: #2(C03 유인S6), #3(C06 Q-76), #4(C19 net중재), #5(C20 모드중재), #6(C23 CRC/MC)
+- 운영: 수정사항은 **같은 PR 브랜치에 업데이트**. 미해결 확정 시 반영.
+
 ## 다음 액션
 - 사용자: S3 서브상태(Normal/Degraded) 직접 작업.
+- Issue #2~#6 확정 → PR 브랜치 업데이트.
 - VC_Net_Level 판단로직 Ideation(C18).
 - 자료 추가 시 → `05_consistency_check.md` 틀에 누적 대조.

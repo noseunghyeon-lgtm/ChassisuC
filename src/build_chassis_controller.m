@@ -90,6 +90,8 @@ function defineData(ch)
     % ⚠️ 미확정 — 안전 가드가 확정 전 참이 되지 않도록 -1(무효) placeholder
     addParam(ch, 'TBD_STANDSTILL_SPEED',   '-1');   % 차속0 임계 (C05)
     addParam(ch, 'TBD_LED_BLINK_HZ',       '-1');   % LED 점멸주기 (C17)
+    addParam(ch, 'MC_STALE_FAIL_COUNT',    '10');   % MC 10회 연속 실패 → stale (C23/#6)
+    addParam(ch, 'MODE_PRIORITY_CC',       '1');    % CC 우선 (C20/#5)
 
     % ---- 입력 (데이터 딕셔너리 §2) ----
     inSpec = { ...
@@ -137,7 +139,8 @@ function defineData(ch)
         'video_hb_warn','boolean'; ...         % 영상 HB 경고(천이 없음)
         'speed_limit_active','boolean'; ...     % S3_Degraded
         'speed_limit_value','single'; ...
-        'degraded_led_blink','boolean'};        % S3_Degraded LED
+        'degraded_led_blink','boolean'; ...     % S3_Degraded LED
+        'system_check_request','boolean'};      % CC/VC 모드 불일치 운영자 점검요청 (C20/#5)
     for i = 1:size(outSpec,1)
         addIO(ch, outSpec{i,1}, 'Output', outSpec{i,2});
     end
