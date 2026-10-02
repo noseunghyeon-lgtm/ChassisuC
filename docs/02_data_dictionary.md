@@ -6,18 +6,27 @@
 
 ---
 
-## 1. 상태 열거형 (Enum: `VehState`)
+## 1. 상태 열거형 (Enum: `VehState`) — ★ DB Value Table 매칭 (C21 해소)
 
-| 이름 | 값 | 비고 |
-| --- | --- | --- |
-| `SLEEP` (S0) | 0 | |
-| `MANUAL` (S1) | 1 | 유인 수동 주행 |
-| `REMOTE_READY` (S2) | 2 | 원격 준비·대기 |
-| `REMOTE_ACTIVE` (S3) | 3 | 원격 주행 |
-| `AEBS` (S4) | 4 | AEBS 제동 개입 |
-| `SAFE_STOP` (S5) | 5 | Heartbeat 상실 |
-| `FAULT_SAFE` (S6) | 6 | 치명 고장 |
-| `INIT` | **255** | ⚠️ TBD_INIT_ENCODING — CAN §2.2 (§10) 확정 시 교체 |
+> `Chassis_Operation_Status.Chassis_State_Machine_Status_VC` ValueTable 에 **발행코드를 일치**시킴.
+> DB: `0:Invalid, 1:S0, 2:S1, 3:S2, 4:S3, 5:S4, 6:S5, 7:S6, 8~15:Reserved`.
+> enum 식별자는 명칭 사전(`00`) 정본, **발행값은 DB 기준(1~7)**.
+
+| 상태 ID | enum 식별자 | **CAN 발행값(DB)** | 비고 |
+| --- | --- | --- | --- |
+| (무효) | `INVALID` | **0** | DB 0:Invalid — 미초기화/오류 |
+| S0 | `SLEEP` | **1** | DB 1:S0 |
+| S1 | `MANUAL` | **2** | DB 2:S1 |
+| S2 | `REMOTE_ARMED` | **3** | DB 3:S2 |
+| S3 | `REMOTE_ACTIVE` | **4** | DB 4:S3 |
+| S4 | `AEBS_OVERRIDE` | **5** | DB 5:S4 |
+| S5 | `COMM_LOSS_BRAKE` | **6** | DB 6:S5 |
+| S6 | `FAULT_SAFE_STATE` | **7** | DB 7:S6 |
+| INIT | `INIT` | **0 (Invalid 로 발행)** | DB에 INIT 코드 없음 → 자기진단 중엔 Invalid(0) 발행. (C02 해소: INIT=255 대신 0/Invalid) |
+
+> **변경점**: 종전 설계는 `S0=0..S6=6, INIT=255` 였으나, DB Value Table 과 맞추기 위해
+> **`S0=1..S6=7, Invalid=0`** 로 통일. INIT 구간은 상태머신이 아직 유효하지 않으므로 **Invalid(0) 발행**.
+> → `veh_state_code` 산출 = (내부 상태 S0~S6) + 1, INIT 은 0.
 
 ---
 
@@ -71,6 +80,7 @@
 | `speed_limit_active` | boolean | **속도 제한 활성** (S3_Degraded) | → 가속/제동 제어 |
 | `speed_limit_value` | single | 제한 속도값 = **10 km/h** (`DEGRADED_SPEED_LIMIT`) ✅확정 | Degradation 시 적용 |
 | `degraded_led_blink` | boolean | **Degradation LED 점멸** → 원격 스테이션 / 내부 LED | → RS HMI / 차량 LED |
+| `system_check_request` | boolean | **CC/VC 모드 불일치 → 운영자 시스템 점검 요청** (상태천이 없음) | → RS HMI (C20/#5) |
 
 ---
 
@@ -106,6 +116,9 @@
 | `NET_LEVEL_NORMAL_MIN` | 5 | — | Net Level 5~10 → 정상(S3_Normal) ✅확정 |
 | `DEGRADED_SPEED_LIMIT` | 10 | km/h | Degradation 최대속도 ✅확정 |
 | `DEGRADED_LED_BLINK_HZ` | `[TBD]` | Hz | ⚠️ **TBD** — LED 점멸 주기 |
+| `MC_STALE_FAIL_COUNT` | 10 | 회 | MC 연속 실패 시 stale 판정 ✅확정(#6) |
+| `CRC_ALGORITHM` | CRC-8 SAE J1850 | — | poly 0x1D, init 0xFF, xorout 0xFF ✅확정(#6) |
+| `MODE_PRIORITY` | CC > VC | — | 모드요청 중재 우선순위 ✅확정(#5) |
 | `LOG_DEPTH_N` | `[TBD]` | 개 | 천이 이력 깊이 (SRS-SYS-040) |
 
 ### 5.1 추가 미해결 (이번 자료 반영)

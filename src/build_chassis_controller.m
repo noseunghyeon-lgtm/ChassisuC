@@ -67,15 +67,17 @@ end
 function defineData(ch)
 % 명칭 사전(00_glossary.md) · 데이터 딕셔너리(02) 정본 반영
 
-    % ---- 상태 발행 코드 상수 (VEH_STS.SystemState) ----
-    addConst(ch, 'C_S0',   '0');
-    addConst(ch, 'C_S1',   '1');
-    addConst(ch, 'C_S2',   '2');
-    addConst(ch, 'C_S3',   '3');
-    addConst(ch, 'C_S4',   '4');
-    addConst(ch, 'C_S5',   '5');
-    addConst(ch, 'C_S6',   '6');
-    addConst(ch, 'C_INIT', '255');   % ⚠️ TBD_INIT_ENCODING — CAN §2.2 (C02)
+    % ---- 상태 발행 코드 상수 (Chassis_State_Machine_Status_VC) ----
+    % ★ C21: DB Value Table 매칭 — 0:Invalid, 1:S0 .. 7:S6
+    addConst(ch, 'C_INVALID', '0');  % DB 0:Invalid (INIT 구간 발행값)
+    addConst(ch, 'C_S0',   '1');     % DB 1:S0
+    addConst(ch, 'C_S1',   '2');     % DB 2:S1
+    addConst(ch, 'C_S2',   '3');     % DB 3:S2
+    addConst(ch, 'C_S3',   '4');     % DB 4:S3
+    addConst(ch, 'C_S4',   '5');     % DB 5:S4
+    addConst(ch, 'C_S5',   '6');     % DB 6:S5
+    addConst(ch, 'C_S6',   '7');     % DB 7:S6
+    addConst(ch, 'C_INIT', '0');     % INIT 은 상태머신 미유효 → Invalid(0) 발행 (C02 해소)
 
     % ---- 파라미터 (확정값) ----
     addParam(ch, 'HEARTBEAT_TIMEOUT_MS',   '400');  % SRS-SYS-007
@@ -88,6 +90,8 @@ function defineData(ch)
     % ⚠️ 미확정 — 안전 가드가 확정 전 참이 되지 않도록 -1(무효) placeholder
     addParam(ch, 'TBD_STANDSTILL_SPEED',   '-1');   % 차속0 임계 (C05)
     addParam(ch, 'TBD_LED_BLINK_HZ',       '-1');   % LED 점멸주기 (C17)
+    addParam(ch, 'MC_STALE_FAIL_COUNT',    '10');   % MC 10회 연속 실패 → stale (C23/#6)
+    addParam(ch, 'MODE_PRIORITY_CC',       '1');    % CC 우선 (C20/#5)
 
     % ---- 입력 (데이터 딕셔너리 §2) ----
     inSpec = { ...
@@ -96,8 +100,10 @@ function defineData(ch)
         'heartbeat_ok','boolean'; ...
         'heartbeat_age_ms','uint16'; ...
         'video_hb_ok','boolean'; ...
-        'vc_net_level','uint8'; ...            % 0~10 통신 네트워크 레벨
-        'ttc_s','single'; ...
+        'vc_net_level','uint8'; ...            % 0~10 통신 네트워크 레벨 (VC, degradation 기준)
+        'cc_net_level','uint8'; ...            % 0~10 (CC, 보조 모니터 — C19 중재)
+        'aebs_flag','boolean'; ...             % ★ C22: AEBS 판정 결과 플래그(CC/VC OR). TTC 대체
+        'ttc_s','single'; ...                  % (참고용 유지, 가드는 aebs_flag 사용)
         'fault_critical_confirmed','boolean'; ...
         'fault_suspect','boolean'; ...
         'fault_threatens_control','boolean'; ...
@@ -133,7 +139,8 @@ function defineData(ch)
         'video_hb_warn','boolean'; ...         % 영상 HB 경고(천이 없음)
         'speed_limit_active','boolean'; ...     % S3_Degraded
         'speed_limit_value','single'; ...
-        'degraded_led_blink','boolean'};        % S3_Degraded LED
+        'degraded_led_blink','boolean'; ...     % S3_Degraded LED
+        'system_check_request','boolean'};      % CC/VC 모드 불일치 운영자 점검요청 (C20/#5)
     for i = 1:size(outSpec,1)
         addIO(ch, outSpec{i,1}, 'Output', outSpec{i,2});
     end
@@ -199,14 +206,14 @@ function createTransitions(ch, S)
 
     % ── S1 이탈 (우선순위) ──
     tr(ch, S.S1, S.S6, '[fault_critical_confirmed || fault_threatens_control]', 1);  % T14 유인 S6(정책 TBD)
-    tr(ch, S.S1, S.S4, '[ttc_s < AEBS_BRAKE_TTC_S]{prev_state_before_s4 = C_S1;}', 2); % T11
+    tr(ch, S.S1, S.S4, '[aebs_flag]{prev_state_before_s4 = C_S1;}', 2); % T11 (C22: AEBS 플래그)
     tr(ch, S.S1, S.S2, '[arm_rs_mutual_auth && arm_rmc_2stage && arm_speed_zero && arm_brake_pedal && arm_brake_remote_set && arm_gear_park && mode_req == REQ_TO_S2]', 3); % T05 6조건 AND
     tr(ch, S.S1, S.S0, '[ig_key == IG_OFF]', 4);  % T04
 
     % ── S2 이탈 (우선순위) ──
     tr(ch, S.S2, S.S6, '[fault_critical_confirmed]', 1);                                  % T13
     tr(ch, S.S2, S.S5, '[heartbeat_age_ms > HEARTBEAT_TIMEOUT_MS]', 2);                   % T09
-    tr(ch, S.S2, S.S4, '[ttc_s < AEBS_BRAKE_TTC_S]{prev_state_before_s4 = C_S2;}', 3);    % T11
+    tr(ch, S.S2, S.S4, '[aebs_flag]{prev_state_before_s4 = C_S2;}', 3);    % T11 (C22)
     tr(ch, S.S2, S.S3, '[actuators_neutral && first_valid_cmd]', 4);                      % T07
     tr(ch, S.S2, S.S1, '[mode_req == REQ_TO_S1 && cam_at_origin]', 5);                    % T06
 
@@ -214,13 +221,13 @@ function createTransitions(ch, S)
     tr(ch, S.S3, S.S6, '[fault_critical_confirmed]', 1);                                  % T13
     % T09+net: net 0~1(Stop) 또는 HB 초과 → S5
     tr(ch, S.S3, S.S5, '[vc_net_level <= NET_LEVEL_STOP_MAX || heartbeat_age_ms > HEARTBEAT_TIMEOUT_MS]', 2);
-    tr(ch, S.S3, S.S4, '[ttc_s < AEBS_BRAKE_TTC_S]{prev_state_before_s4 = C_S3;}', 3);    % T11
+    tr(ch, S.S3, S.S4, '[aebs_flag]{prev_state_before_s4 = C_S3;}', 3);    % T11 (C22)
     tr(ch, S.S3, S.S2, '[mode_req == REQ_TO_S2 && vehicle_speed <= TBD_STANDSTILL_SPEED]', 4); % T08
 
     % ── S4 이탈 (우선순위) ──
     tr(ch, S.S4, S.S6, '[fault_critical_confirmed]', 1);                                  % T13
-    tr(ch, S.S4, S.S1, '[ttc_s >= AEBS_BRAKE_TTC_S && prev_state_before_s4 == C_S1]', 2); % T12
-    tr(ch, S.S4, S.S2, '[ttc_s >= AEBS_BRAKE_TTC_S && (prev_state_before_s4 == C_S2 || prev_state_before_s4 == C_S3)]', 3); % T12 (직전 S3→S2)
+    tr(ch, S.S4, S.S1, '[~aebs_flag && prev_state_before_s4 == C_S1]', 2); % T12 (C22: 해제=플래그 해제)
+    tr(ch, S.S4, S.S2, '[~aebs_flag && (prev_state_before_s4 == C_S2 || prev_state_before_s4 == C_S3)]', 3); % T12 (직전 S3→S2)
 
     % ── S5 이탈 (우선순위) ──
     tr(ch, S.S5, S.S6, '[fault_critical_confirmed]', 1);                                  % T13
