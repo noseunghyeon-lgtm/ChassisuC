@@ -117,7 +117,7 @@
 | `DEGRADED_SPEED_LIMIT` | 10 | km/h | Degradation 최대속도 ✅확정 |
 | `DEGRADED_LED_BLINK_HZ` | `[TBD]` | Hz | ⚠️ **TBD** — LED 점멸 주기 |
 | `MC_STALE_FAIL_COUNT` | 10 | 회 | MC 연속 실패 시 stale 판정 ✅확정(#6) |
-| `CRC_ALGORITHM` | CRC-8 H2F (J1939) | — | 룩업테이블, init 0xFF, XOR 0xFF. 범위=Data2~8+SA+PGN. `src/CalcCRCJ1939.m` ✅확정(#6) |
+| `CRC_ALGORITHM` | CRC-8 SAE J1850 | — | poly 0x1D, init 0xFF, xorout 0xFF. 범위=CRC 뺀 앞 전체. `src/CalcCRC8_J1850.m` ✅확정(#6) |
 | `MODE_PRIORITY` | CC > VC | — | 모드요청 중재 우선순위 ✅확정(#5) |
 | `LOG_DEPTH_N` | `[TBD]` | 개 | 천이 이력 깊이 (SRS-SYS-040) |
 
