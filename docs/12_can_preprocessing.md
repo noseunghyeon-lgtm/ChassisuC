@@ -108,20 +108,18 @@ last_mc = received_mc
 if mc_fail_cnt >= 10:  stale = true   % ★ 10회 연속 실패 → 메시지 stale → 유효성 false
 ```
 
-**(2) CRC(체크섬) — ✅ 확정 (Issue #6): CRC-8 H2F (J1939), 검증된 함수 제공**
+**(2) CRC(체크섬) — ✅ 확정 (Issue #6): CRC-8 SAE J1850**
 ```
-% src/CalcCRCJ1939.m — 사용자 제공·검증 완료.
-% CRC-8 H2F 룩업 테이블, init 0xFF, 최종 XOR 0xFF.
-% 계산 입력 순서(= 바이트 범위):
-%   Data Byte 2 ~ Data Byte 8  (Data Byte 1 = CRC 자리, 제외)
-%   + Source Address
-%   + PGN LSB + PGN 2nd byte + PGN MSB   (29-bit CAN ID 에서 추출)
-computed = CalcCRCJ1939(msg_id, msg_data, source_address)
-crc_ok = (computed == received_crc)   % received_crc = Data Byte 1
+% src/CalcCRC8_J1850.m — poly 0x1D, init 0xFF, xorout 0xFF, reflect in/out = false
+% 계산 범위: CRC 바이트(자기 자신)를 제외한 앞의 모든 바이트.
+%   관례상 CRC 는 메시지 마지막 바이트 → data_bytes = payload(1 .. end-1)
+computed = CalcCRC8_J1850( data_bytes_except_crc )
+crc_ok   = (computed == received_crc)   % received_crc = 메시지 마지막 바이트
 ```
-- **바이트 범위 확정(이전 TBD 해소)**: 데이터뿐 아니라 **Source Address + PGN** 까지 CRC에 포함.
-  → J1939 PDU1(PF<240)은 PGN_LSB=0, PDU2(PF≥240)는 PGN_LSB=PS. (함수가 자동 처리)
-- 송신 시 Data Byte 1 에 CRC 를 넣고, 수신 시 동일 함수로 재계산해 비교.
+- **알고리즘**: CRC-8 SAE J1850 (다항식 0x1D, 초기값 0xFF, 최종 XOR 0xFF).
+- **범위**: 자기(CRC) 바이트를 뺀 **앞의 모든 바이트** 전체.
+- 송신 시 마지막 바이트에 CRC 부착, 수신 시 동일 함수로 재계산해 비교.
+- 자체검증: 표준 테스트벡터 `"123456789" → 0x4B` 통과.
 
 **(3) 종합 유효성**
 ```
@@ -174,4 +172,4 @@ CAN Unpack 은 DBC 로 자동 생성 가능 → **DB를 DBC(.dbc)로 export** �
 | ~~C22~~ ✅ | AEBS: TTC → 플래그 | **해소** — 가드 `aebs_flag` 로 전환 | 설계 반영 |
 | ~~C19~~ ✅ | CC/VC net level 중재 | **해소(#4)** — VC·CC 종합 산출은 **외부에서 수행**, Chassis uC는 수신(C18 종결) | 외부 |
 | ~~C20~~ ✅ | 모드요청 CC/VC 중재 | **해소(#5)** — CC 우선, 불일치 시 운영자 점검요청(`system_check_request`) | 「원격/수동 전환」 |
-| ~~C23~~ ✅ | CRC/MC E2E 검증 | **해소(#6)** — CRC-8 H2F(J1939), 범위=Data2~8+SA+PGN, MC 10회 실패 stale. `src/CalcCRCJ1939.m` 검증완료 | 통신/안전 |
+| ~~C23~~ ✅ | CRC/MC E2E 검증 | **해소(#6)** — **CRC-8 SAE J1850**(poly 0x1D, init 0xFF, xorout 0xFF), 범위=CRC 뺀 앞 전체, MC 10회 실패 stale. `src/CalcCRC8_J1850.m` | 통신/안전 |
