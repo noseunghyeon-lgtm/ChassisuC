@@ -39,7 +39,7 @@
 | `heartbeat_ok` | boolean | 0/1 | **원격(명령) Heartbeat** 정상 수신 — Control Computer | Control Computer/RS |
 | `heartbeat_age_ms` | uint16 | ms | 마지막 유효 원격 Heartbeat 경과시간 → S5 판정 | 통신 스택 |
 | `video_hb_ok` | boolean | 0/1 | **영상 Heartbeat** 정상 수신 — Video Streaming Computer. 상실 시 **경고만(상태천이 없음)** | Video Streaming Computer |
-| `vc_net_level` | uint8 | 0~10 | **통신 네트워크 레벨** (CAN). 0~1=Stop(S5), 2~4=Degradation(S3_Degraded), 5~10=정상(S3_Normal) ✅확정 | VC(영상컴퓨터)/CAN. 판단로직 Ideation 예정(C18) |
+| `vc_net_level` | uint8 | 0~10 | **통신 네트워크 레벨** (CAN). 0~1=Stop(S5), 2~4=Degradation(S3_Degraded), 5~10=정상(S3_Normal) ✅확정 | VC(영상컴퓨터)/CAN. **외부 산출값 수신** — Chassis uC 내부 산출 없음(C18 종결) |
 | `ttc_s` | single | s | Time-To-Collision | AEBS (SRS-SYS-003) |
 | `fault_critical_confirmed` | boolean | 0/1 | **치명 고장 확정** 신호 | 「진단」 §4 |
 | `fault_suspect` | boolean | 0/1 | 치명 고장 **의심**(상태 불변, 명령제한) | 「진단」 §4 |

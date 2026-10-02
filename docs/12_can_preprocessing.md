@@ -45,15 +45,15 @@ DB는 `heartbeat_age_ms`를 직접 주지 않음. 대신 **AliveCounter(0~15 롤
 
 **중재 대상(= 무엇을 중재하나):** "degradation/stop 판정에 쓸 **단일 net_level** 을 두 값에서 어떻게 뽑을까".
 
-**중재 규칙 — ✅ 확정 (Issue #4):** VC·CC **두 데이터를 모두 활용**해 Chassis uC 가 단일 `net_level` 산출.
+**규칙 — ✅ 확정 (Issue #4 + C18 종결):** VC·CC **두 데이터를 모두 활용**해 산출한 `net_level` 을
+**외부(VC/CC 측)에서 계산**하여 CAN 으로 전달한다. **Chassis uC 는 산출식을 돌리지 않고 수신값을 그대로 사용**.
 ```
-net_level = f(VC_Net_Level, CC_Net_Level)   % 두 값 모두 입력. 산출식은 Ideation(C18)에서 상세화
-vc_net_level(Stateflow 입력) = net_level
+% 외부에서 VC_Net_Level, CC_Net_Level 을 종합한 결과가 CAN 으로 들어옴
+vc_net_level(Stateflow 입력) = 수신한 net_level   % 범위검사(0~10)만 수행
 ```
-- **확정**: VC 단독이 아니라 **둘 다 활용**. 산출 후 Degradation/Stop 판정.
+- **확정**: 산출 로직은 **외부 소관**(C18 종결 — Chassis uC 내부 Ideation 불필요).
+- Chassis uC 전처리는 **범위검사(0~10)** 와 유효성만 담당.
 - 판정: 0~1 → S5(Stop), 2~4 → S3_Degraded, 5~10 → S3_Normal (경계 확정값).
-- 전처리는 두 신호(`vc_net_level`, `cc_net_level`)를 모두 Stateflow 앞단에 제공하고,
-  **산출식(가중/min/함수)의 상세는 C18(VC_Net_Level 판단로직 Ideation)**에서 확정.
 
 ### 1.5 E-Stop 다중소스 중재 (HW + CC + VC)
 E-Stop 은 **3경로**: HW(하드와이어) + `E_STOP_AA`(CC) + `E_STOP_AB`(VC).
@@ -172,6 +172,6 @@ CAN Unpack 은 DBC 로 자동 생성 가능 → **DB를 DBC(.dbc)로 export** �
 | --- | --- | --- | --- |
 | ~~C21~~ ✅ | 상태 발행코드 — DB Value Table 매칭 | **해소** — S0=1..S6=7, Invalid=0 | 설계 통일 |
 | ~~C22~~ ✅ | AEBS: TTC → 플래그 | **해소** — 가드 `aebs_flag` 로 전환 | 설계 반영 |
-| ~~C19~~ ✅ | CC/VC net level 중재 | **해소(#4)** — VC·CC 둘 다 활용해 net_level 산출(산출식은 C18) | 시스템 |
+| ~~C19~~ ✅ | CC/VC net level 중재 | **해소(#4)** — VC·CC 종합 산출은 **외부에서 수행**, Chassis uC는 수신(C18 종결) | 외부 |
 | ~~C20~~ ✅ | 모드요청 CC/VC 중재 | **해소(#5)** — CC 우선, 불일치 시 운영자 점검요청(`system_check_request`) | 「원격/수동 전환」 |
 | ~~C23~~ ✅ | CRC/MC E2E 검증 | **해소(#6)** — CRC-8 H2F(J1939), 범위=Data2~8+SA+PGN, MC 10회 실패 stale. `src/CalcCRCJ1939.m` 검증완료 | 통신/안전 |

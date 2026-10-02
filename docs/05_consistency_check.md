@@ -51,7 +51,7 @@
 | ⛔ C15 | E-Stop 전송 매체(HW/CAN) 중재 | 「안전」 | 🆕 택일/다중화 규칙 |
 | ~~C16~~ ✅ | ~~Net Level 경계값~~ | **해소** | ✅ 0~1=Stop, 2~4=Degradation, **5~10=정상** 확정 |
 | 🔶 C17 | Degradation LED 점멸 주기 | 시스템 | ✅ 속도제한 **10 kph** 확정 / ⛔ LED 점멸 Hz 미정 |
-| ⛔ C18 | VC_Net_Level 판단 로직 | **Ideation 예정** | 🆕 CAN 데이터로 네트워크 레벨 산출 방식 |
+| ~~C18~~ ✅ | VC_Net_Level 판단 로직 | **종결** — 외부(VC/CC)에서 산출한 net_level 을 CAN 으로 **수신만**. Chassis uC 내부 산출 불필요 | 외부 |
 
 ### 확정됨 (이번 아키텍처 공유로)
 - ✅ **우선순위 Priority = Chassis uC 단독 관리**
