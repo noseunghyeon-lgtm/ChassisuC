@@ -45,6 +45,9 @@ function build_chassis_controller()
     %% 4. 코어 전이 (가드) — 우선순위 ExecutionOrder 반영
     createTransitions(ch, S);
 
+    %% 4.1 차트 레벨 지속 로직 (during) — 자기진단·타이머·플래그 골격 (G4/G5/G7/G8)
+    addChartDuringLogic(ch);
+
     %% 5. 저장
     Simulink.BlockDiagram.arrangeSystem(modelName);
     save_system(modelName);
@@ -123,6 +126,7 @@ function defineData(ch)
         'arm_gear_park','boolean'; ...
         'gear_ready','boolean'; ...
         'selftest_done','boolean'; ...
+        'init_timeout','boolean'; ...          % G2: INIT 자기진단 상한시간 초과 (SRS-SYS-039)
         'dtc_cleared','boolean'};
     for i = 1:size(inSpec,1)
         addIO(ch, inSpec{i,1}, 'Input', inSpec{i,2});
@@ -190,6 +194,30 @@ function S = createStates(ch)
 end
 
 % =====================================================================
+function addChartDuringLogic(ch)
+% 차트 레벨 during 액션 — 매 틱(10ms) 수행되는 지속 로직 골격.
+% G4(자기진단/타이머), G5(heartbeat age 명확화), G7(S4+S5 플래그), G8(fault_suspect).
+%
+% 주의: heartbeat_age_ms 는 전처리(§12 AliveCounter 정체감시)에서 산출된 입력으로 간주한다
+%       (G5). 아래 during 은 상태머신 내부 보조 로직만 담당.
+    ch.LabelString = sprintf([ ...
+        'ChassisControllerFSM\n' ...
+        'during:\n' ...
+        ' %% --- G7: S4+S5 동시성립 플래그 (§3) ---\n' ...
+        ' dual_s4s5_flag = (aebs_flag && (heartbeat_age_ms > HEARTBEAT_TIMEOUT_MS));\n' ...
+        ' %% --- G8: 고장 의심 → 원격명령 제한(상태 불변, §6-3) ---\n' ...
+        ' if (fault_suspect) \n' ...
+        '   remote_cmd_lock = true;\n' ...
+        ' end\n' ...
+        ' %% --- G4: 자기진단 골격 (§8) — 상세 구현은 전처리/감시블록 ---\n' ...
+        ' %% tick_overrun: 10ms 틱 초과 감시 (SRS-SYS-038)\n' ...
+        ' %% state_integrity_ok: 상태변수 이중화(정·역보수) 비교\n' ...
+        ' %% TODO: 틱지연·무결성·천이이력·워치독 (§8) — 전용 감시 함수에서 수행\n' ...
+        ' %% --- G6: 상태 enum 범위 이탈 감시 → 즉시 S6 + sw_defect_dtc (§7) ---\n' ...
+        ' %% TODO: veh_state_code 범위검사(1..7), 이탈 시 sw_defect_dtc=true']);
+end
+
+% =====================================================================
 function createTransitions(ch, S)
 % 코어 전이 T01~T15 + 우선순위(ExecutionOrder) + 금지천이는 미생성으로 차단.
 % 우선순위(§3): E-Stop > 치명고장(S6) > HB상실(S5) > AEBS(S4) > 모드전환.
@@ -203,16 +231,19 @@ function createTransitions(ch, S)
     tr(ch, S.S0,   S.INIT, '[wake_source || ig_key == IG_ON]');
     % T02 INIT -> S1 (실패처리 TBD, C08)
     tr(ch, S.INIT, S.S1,  '[selftest_done && gear_ready]');
-    % T03 INIT -> S6
-    tr(ch, S.INIT, S.S6,  '[fault_critical_confirmed]');
+    % T03 INIT -> S6 : 자기진단 중 치명고장 확정 OR 상한시간 초과 (G2, 정본 §3.1)
+    tr(ch, S.INIT, S.S6,  '[fault_critical_confirmed || init_timeout]');
 
     % ── S1 이탈 (우선순위) ──
+    % G1 T00: E-Stop 최우선(순위 0). 결과상태는 C01 미정 → 임시 S6(가장 보수적). 「안전」 확정 시 교체.
+    tr(ch, S.S1, S.S6, '[estop_active]', 0);  % TBD_ESTOP_TARGET (C01)
     tr(ch, S.S1, S.S6, '[fault_critical_confirmed || fault_threatens_control]', 1);  % T14 유인 S6(정책 TBD)
     tr(ch, S.S1, S.S4, '[aebs_flag]{prev_state_before_s4 = C_S1;}', 2); % T11 (C22: AEBS 플래그)
     tr(ch, S.S1, S.S2, '[arm_rs_mutual_auth && arm_rmc_2stage && arm_speed_zero && arm_brake_pedal && arm_brake_remote_set && arm_gear_park && mode_req == REQ_TO_S2]', 3); % T05 6조건 AND
     tr(ch, S.S1, S.S0, '[ig_key == IG_OFF]', 4);  % T04
 
     % ── S2 이탈 (우선순위) ──
+    tr(ch, S.S2, S.S6, '[estop_active]', 0);  % G1 E-Stop 최우선 (C01 TBD)
     tr(ch, S.S2, S.S6, '[fault_critical_confirmed]', 1);                                  % T13
     tr(ch, S.S2, S.S5, '[heartbeat_age_ms > HEARTBEAT_TIMEOUT_MS]', 2);                   % T09
     tr(ch, S.S2, S.S4, '[aebs_flag]{prev_state_before_s4 = C_S2;}', 3);    % T11 (C22)
@@ -220,6 +251,7 @@ function createTransitions(ch, S)
     tr(ch, S.S2, S.S1, '[mode_req == REQ_TO_S1 && cam_at_origin]', 5);                    % T06
 
     % ── S3 이탈 (우선순위) ── S3 내부(Normal/Degraded)는 사용자 작업.
+    tr(ch, S.S3, S.S6, '[estop_active]', 0);  % G1 E-Stop 최우선 (C01 TBD)
     tr(ch, S.S3, S.S6, '[fault_critical_confirmed]', 1);                                  % T13
     % T09+net: net 0~1(Stop) 또는 HB 초과 → S5
     tr(ch, S.S3, S.S5, '[vc_net_level <= NET_LEVEL_STOP_MAX || heartbeat_age_ms > HEARTBEAT_TIMEOUT_MS]', 2);
@@ -227,11 +259,13 @@ function createTransitions(ch, S)
     tr(ch, S.S3, S.S2, '[mode_req == REQ_TO_S2 && vehicle_speed <= TBD_STANDSTILL_SPEED]', 4); % T08
 
     % ── S4 이탈 (우선순위) ──
+    tr(ch, S.S4, S.S6, '[estop_active]', 0);  % G1 E-Stop 최우선 (C01 TBD)
     tr(ch, S.S4, S.S6, '[fault_critical_confirmed]', 1);                                  % T13
     tr(ch, S.S4, S.S1, '[~aebs_flag && prev_state_before_s4 == C_S1]', 2); % T12 (C22: 해제=플래그 해제)
     tr(ch, S.S4, S.S2, '[~aebs_flag && (prev_state_before_s4 == C_S2 || prev_state_before_s4 == C_S3)]', 3); % T12 (직전 S3→S2)
 
     % ── S5 이탈 (우선순위) ──
+    tr(ch, S.S5, S.S6, '[estop_active]', 0);  % G1 E-Stop 최우선 (C01 TBD)
     tr(ch, S.S5, S.S6, '[fault_critical_confirmed]', 1);                                  % T13
     tr(ch, S.S5, S.S2, '[heartbeat_ok && vc_net_level >= NET_LEVEL_NORMAL_MIN && vehicle_speed <= TBD_STANDSTILL_SPEED]', 2); % T10 (S2 경유 필수)
 
