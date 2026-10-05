@@ -1,69 +1,80 @@
-# 진행 요약 (Compact) — 원격 차량 제어 / Chassis uC
+# 진행 요약 (PROGRESS) — ChassisuC 상태머신 + CAN 전처리
 
-> 소방특장차량 원격제어 Top StateMachine(S0~S6) 설계. **개념설계 단계** (구현 .slx 는 보류).
-> 상태 정의 정본: 「차량 전체 상태천이 §3」 / 구현 설계: 「전체 관리 프로세스 §2」.
+> 소방특장차량 원격제어 Chassis uC 설계. 상태머신(S0~S6+INIT) 개념설계 + CAN DB 반영 전처리 + 핀맵.
+> repo: `noseunghyeon-lgtm/ChassisuC`. 상태 정의 정본: 「차량 전체 상태천이 §3」.
 
-## 산출물 (`/projects/sandbox`, zip: `RemoteControlFSM_design.zip`)
+---
 
-| 파일 | 내용 |
+## 1. 산출물 (docs/)
+
+| 문서 | 내용 |
 | --- | --- |
-| `docs/01_state_transition_table.md` | 전이표 T01~T15, §3 우선순위, §7 금지천이, §8 자기진단 |
-| `docs/02_data_dictionary.md` | 입력/출력/로컬/파라미터/enum. S1→S2 6조건, 영상HB, §7.1 무천이대응 |
-| `docs/03_transition_data_mapping.md` | 전이↔데이터 매핑, 역인덱스 |
-| `docs/04_state_subsystem_matrix.md` | 상태별 서브시스템(Brake/Gear/Accel/Steering/FSM) 동작 |
-| `docs/05_consistency_check.md` | **정합성 점검표** — 불일치 M01~M04, 미해결 C01~C15 |
-| `docs/06_state_definitions.md` | 상태 정의 + 명칭 매핑(정본↔코드식별자) |
-| `docs/07_chassis_controller_concept.md` | **Chassis uC 개념설계** — 컨텍스트/상호작용/상태별 역할 |
-| `src/build_remote_control_fsm.m` | .slx 자동생성 스크립트 (실행검증 안 됨, MATLAB 필요) |
+| `00_glossary` | 명칭 사전(정본) — 컴포넌트/상태/약어 |
+| `01_state_transition_table` | 전이표 T01~T15, §3 우선순위, §7 금지천이, §8 자기진단 |
+| `02_data_dictionary` | 입력/출력/로컬/파라미터/enum (DB 반영) |
+| `03_transition_data_mapping` | 전이↔데이터 매핑, 역인덱스 |
+| `04_state_subsystem_matrix` | 상태별 서브시스템(Brake/Gear/Accel/Steering/FSM) 동작 |
+| `05_consistency_check` | 정합성 점검표 — 불일치 M01~M04, 미해결 C01~C23 |
+| `06_state_definitions` | 상태 정의 + 명칭 매핑 |
+| `07_chassis_controller_concept` | Chassis uC 개념설계(컨텍스트/상호작용/역할) |
+| `08_state_cards` | 상태 카드(상태 중심 뷰) |
+| `09_mermaid_diagrams` | Mermaid 다이어그램 6종 |
+| `10_state_summary` | 상태 종합정리(정의·역할·천이) |
+| `11_can_signal_mapping` | CAN 신호 ↔ Stateflow 입출력 매핑 (DB 기반) |
+| `12_can_preprocessing` | CAN 전처리 설계(스케일/유효성/HB/E-Stop/CRC·MC) |
+| `13_bus_param_generation_direction` | CANDB→Simulink Bus/Param 생성 방향성(Start Bit 정렬) |
+| `14_statemachine_review` | 상태머신 고도화 점검(G1~G9 공백) |
+| `15_preprocessing_blocks` | 전처리 블록 라이브러리 인터페이스 |
+| `16_gw1_chassisuc_pinmap` | **GW1(ChassisuC) 핀맵** (RC40_Pinmap.xlsx) |
+| `REVIEW_CHECKLIST` | PR 리뷰 가이드 |
 
-## 상태 (S0~S6)
-`S0`Sleep · `INIT` · `S1`Manual(유인) · `S2`Remote-Armed(대기) · `S3`Remote-Active(주행) ·
-`S4`AEBS-Override · `S5`Comm-Loss Brake · `S6`Fault Safe(비가역). 발행코드 0~6, INIT=255(TBD).
+## 2. 코드 (src/)
+- `build_chassis_controller.m` — Chassis uC 메인 Stateflow 생성(정본명칭, S3=빈 composite, E-Stop/INIT타임아웃/during 포함)
+- `build_remote_control_fsm.m` — (구) 초기 스크립트
+- `CalcCRC8_J1850.m` — CRC-8 SAE J1850 계산(poly 0x1D)
+- `preproc/` — 전처리 블록: CheckHeartbeat, CheckCRC, ArbitrateEStop, ArbitrateModeReq, ValidateHoldLast, ScalePhys
+- `tools/parse_xlsx.py` — xlsx 파서(stdlib)
 
-## 핵심 설계 규칙 (확정)
-- 우선순위: **E-Stop(0) > S6 > S5 > S4 > 모드전환** — Chassis uC **단독 관리**.
-- S2 = 유일한 원격 재진입 관문. S3→S1 직접 금지(S2 경유). S6 비가역(IG-OFF 재기동+DTC).
-- S4 해제 복귀: 직전 S1→S1, S2/S3→S2.
-- 금지천이는 전이 미생성으로 원천차단.
+## 3. 데이터
+- `DB_ChassisuC.xlsx` — CAN DB (71 메시지 / 504 신호)
+- `RC40_Pinmap.xlsx` — GW1(ChassisuC) 핀맵
 
-## 아키텍처 확정 사항 (최근)
-- **우선순위**: Chassis uC 단독 관리.
-- **E-Stop**: Hardwire 또는 CAN 으로 Chassis uC 수신·판단 (결과상태는 TBD).
-- **Heartbeat 2종**: Control Computer(명령) 상실→**S5** / Video Streaming(영상) 상실→**경고등만, 천이없음**.
-- Chassis uC ↔ FSM uC: **S6만 공유**(점선). 하위모듈은 상태 읽기만+천이요청/고장보고.
-- **S3 Degradation (신규)**: S3=서브상태 Normal/Degraded. `vc_net_level`(CAN 0~10) 기준 —
-  0~1=S5(Stop), 2~4=Degraded(**속도제한 10kph**+LED점멸), 5~10=Normal. 감도 호전 시 해제.
-  LED 점멸주기 TBD. net_level 산출은 외부(VC/CC) 수신 — Chassis uC 내부 산출 없음(C18 종결).
+---
 
-## 명칭 불일치 (해소: 다이어그램=정본, 코드식별자 매핑 병기)
-S2 Remote-Armed=`REMOTE_READY` / S4 AEBS-Override=`AEBS` / S5 Comm-Loss Brake=`SAFE_STOP`.
+## 4. 상태 (S0~S6) + 발행코드 (DB ValueTable 매칭, C21)
+Invalid=0, `S0`SLEEP=1, `S1`MANUAL=2, `S2`REMOTE_ARMED=3, `S3`REMOTE_ACTIVE=4,
+`S4`AEBS_OVERRIDE=5, `S5`COMM_LOSS_BRAKE=6, `S6`FAULT_SAFE_STATE=7. INIT=Invalid(0) 발행.
 
-## 미해결 — 다음에 확정 필요 (우선순위순)
-1. **M01**: 원격 진입 조건 수 — 6조건(다이어그램) vs 4조건(§4 원문). 정본 확정 필요.
-2. **C03/M04**: 유인(S1) S6 대응 — 최대제동 금지. 「안전」+**기아 합의**. 리드타임 최장.
-3. **C06**: Q-76 조향 — S5/S6 조향 거동 미확정.
-4. **M02/C04**: S6 "검출"→"확정" 라벨 + 디바운스 N·T.
-5. **M03**: AEBS 진입소스 "임의"→S1/S2/S3 로 좁히기.
-6. 기타: C01(E-Stop 결과상태), C02(INIT코드), C05(차속0 임계), C07(RMC 2단조작 Q-56),
-   C13(영상HB 경고 임계시간 — **사용자가 추후 결정**), C14(FSM uC S6 공유 프로토콜),
-   C15(E-Stop HW/CAN 중재), C08~C11.
+## 5. 확정 사항 (주요)
+- 우선순위: E-Stop(0) > S6 > S5 > S4 > 모드. **Chassis uC 단독 관리**.
+- E-Stop: Hardwire 또는 CAN(E_STOP_AA/AB) 3경로 OR 수신. 결과상태 C01 TBD(임시 S6).
+- Heartbeat: Control(명령) 상실→S5 / Video(영상) 상실→경고만. **AliveCounter(MC) 정체 감시**.
+- S3 degradation: `vc_net_level`(0~10, 외부 산출 수신). 0~1=S5(Stop)/2~4=Degraded(속도10kph+LED)/5~10=Normal.
+- 유인 S6(C03): 최대제동 금지 + 원격기능만 잠금 + 원격모드 진입불가.
+- 조향 Q-76(C06): S5/S6 홀드, EPS 제어 안 함(내력 미발생).
+- 모드 중재(C20): CC 우선, 불일치 시 운영자 점검요청(system_check_request).
+- net 중재(C19/C18): VC·CC 둘 다 활용, 산출은 외부. Chassis uC는 수신+범위검사.
+- CRC(C23): CRC-8 SAE J1850(poly 0x1D, init/xorout 0xFF), 범위=CRC 뺀 앞 전체. MC 10회 실패 stale.
+- AEBS(C22): TTC 아닌 aebs_flag(CC/VC AEBS==7) 방식.
 
-## 구현 (Stateflow)
-- `src/build_chassis_controller.m` — **Chassis uC 메인 FSM 생성 스크립트**.
-  정본 명칭(REMOTE_ARMED 등), 전체 I/O(vc_net_level·arm_* 6신호·degradation 출력 포함),
-  코어 전이 T01~T15 + ExecutionOrder 우선순위, 금지천이 미생성.
-  **S3 = 빈 composite** (서브상태 Normal/Degraded는 사용자 작업). TBD는 placeholder.
-  정적검토 OK(참조 식별자 전부 정의, 상태별 이탈 전이 수 = 상태카드 일치). MATLAB 실행검증은 미수행.
+## 6. 상태머신 고도화 (docs/14)
+- E-Stop 전이(S1~S5, 순위0) 추가, INIT 타임아웃→S6, 차트 during(dual_s4s5_flag/fault_suspect/자기진단 골격).
 
-## GitHub (noseunghyeon-lgtm/ChassisuC)
-- PR #1: design/chassis-controller-stateflow → main (설계 베이스라인, 열어두고 리뷰)
-- DB_ChassisuC.xlsx 저장소에 있음. tools/parse_xlsx.py 로 파싱(stdlib).
-- 리뷰 가이드: docs/REVIEW_CHECKLIST.md
-- 핵심 미해결 Issue: #2(C03 유인S6), #3(C06 Q-76), #4(C19 net중재), #5(C20 모드중재), #6(C23 CRC/MC)
-- 운영: 수정사항은 **같은 PR 브랜치에 업데이트**. 미해결 확정 시 반영.
+## 7. 미해결 (남은 것)
+- C01 E-Stop 결과상태(「안전」), C04 디바운스 N·T, C05 차속0 임계, C07 RMC핀(Q-56),
+  C08 INIT실패처리, C09 동시플래그 비트, C10 DTC클리어, C11 S0지연, C13 영상HB시간,
+  C15 E-Stop HW/CAN중재, C17 LED점멸주기. G3/G6/G9(상태머신 확인항목).
 
-## 다음 액션
-- 사용자: S3 서브상태(Normal/Degraded) 직접 작업.
-- Issue #2~#6 확정 → PR 브랜치 업데이트.
-- (C18 종결: net_level은 외부 산출값 수신)
-- 자료 추가 시 → `05_consistency_check.md` 틀에 누적 대조.
+## 8. GitHub 이력
+- PR #1,#7,#8,#9,#10 머지됨. Issue #2~#6(C03/C06/C19/C20/C23) 전부 해소·닫힘.
+- 운영: 수정은 design 브랜치 → PR → main 머지.
+
+## 9. 핀맵 (디버깅용, docs/16 + 메모리)
+- GW1=ChassisuC: 입력7(K21/K22 Inhibit, K31/K34 MODE, K38/K39 APP, K24 KEYON),
+  출력19(LED A03/A05/A19/A20/A31, IGN A33/K12/K14/K15/K16, 기어 K84~K87, APP K80/K81, 조향 K17).
+- GW2=FSM uC(별개): 방수펌프/메인밸브/엔진시동 — 소방특장. 혼동 주의.
+
+## 10. 다음 액션
+- 핀맵 문서(16) PR 생성·머지.
+- S3 서브상태(Normal/Degraded) 구현(사용자 영역).
+- 남은 수치 확정(C04/C05/C13/C17).
