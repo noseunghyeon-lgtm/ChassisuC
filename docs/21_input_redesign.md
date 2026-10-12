@@ -59,7 +59,7 @@
 | `fault_threatens_control` | ❓ 실제 신호 없음 — 확인 후 제거 검토 |
 | `takeover_req` | ❓ 운전자 개입 감지원 미정 — 확인 |
 | `dtc_cleared` | ❓ 진단 모듈 — 확인 |
-| `arm_rmc_2stage` | ⚠️ **Q-56: 현 HW로 성립 불가** — 제거 or bypass 결정 필요 |
+| `arm_rmc_2stage` | ✅ **제거 확정 — 2단조작 포기** (Q-56). 인터록 4→3조건 |
 
 ---
 
@@ -86,6 +86,6 @@
 1. `fault_suspect`, `fault_threatens_control` — 실제 신호 있나? (없으면 제거)
 2. `takeover_req` — 운전자 개입(조향/제동)을 어느 신호로 감지? (테이크오버 B안)
 3. `dtc_cleared` — S6 이탈용, 진단 신호 있나?
-4. `arm_rmc_2stage` — 제거 / bypass / 유지?
+4. ~~`arm_rmc_2stage`~~ ✅ **제거 확정 (2단조작 포기)** — 인터록 3조건
 5. `manual_switch_req`(u8_MODE_MN) vs 차량실내 Manual 스위치 — 주체 확정
 6. `ig_key` enum → `IGN_ON` bool 로 축소해도 되나? (START 위치 안 쓰나?)

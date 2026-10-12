@@ -119,11 +119,11 @@ function defineData(ch)
         'pedal_pos','single'; ...
         'cam_at_origin','boolean'; ...
         % S1→S2 진입 6조건 (interlock, 모두 AND)
-        % S1→S2 인터록 — 정본 §3.3 4조건 (A1 확정: 4조건 정렬)
-        'arm_rs_mutual_auth','boolean'; ...    % ① RS 상호인증 (SRS-SYS-013)
-        'arm_rmc_2stage','boolean'; ...        % ② 2단 조작 (SRS-SYS-018) ⚠️ Q-56 핀 부재
-        'arm_speed_zero','boolean'; ...        % ③ 차속 0 (SRS-SYS-006)
-        'arm_gear_park_or_neutral','boolean'; ... % ④ 기어 P 또는 N (정본 §3.3)
+        % S1→S2 인터록 — 정본 §3.3 4조건에서 2단조작 포기 → 3조건 (RS인증·차속0·기어P/N)
+        'arm_rs_mutual_auth','boolean'; ...    % ① RS 상호인증 (VC_Net_Link_Count 기반)
+        'arm_speed_zero','boolean'; ...        % ② 차속 0 (f_VehicleSpeed)
+        'arm_gear_park_or_neutral','boolean'; ... % ③ 기어 P 또는 N (u8_Gear_Status 0:P/6:N)
+        % [2단조작 포기] arm_rmc_2stage 제거 — Q-56 현 HW 성립불가. 인터록 4→3조건.
         'gear_ready','boolean'; ...
         'selftest_done','boolean'; ...
         'init_timeout','boolean'; ...          % G2: INIT 자기진단 상한시간 초과 (SRS-SYS-039)
@@ -239,8 +239,8 @@ function createTransitions(ch, S)
     tr(ch, S.S1, S.S6, '[estop_active]', 0);  % TBD_ESTOP_TARGET (C01)
     tr(ch, S.S1, S.S6, '[fault_critical_confirmed || fault_threatens_control]', 1);  % T14 유인 S6(정책 TBD)
     tr(ch, S.S1, S.S4, '[aebs_flag]{prev_state_before_s4 = C_S1;}', 2); % T11 (C22: AEBS 플래그)
-    % T05 S1->S2: 정본 §3.3 인터록 4조건 AND (A1 확정). 브레이크 조건은 S2->S3 중립확인으로 이동.
-    tr(ch, S.S1, S.S2, '[arm_rs_mutual_auth && arm_rmc_2stage && arm_speed_zero && arm_gear_park_or_neutral && mode_req == REQ_TO_S2]', 3); % T05 4조건 AND
+    % T05 S1->S2: 인터록 3조건 AND (RS인증·차속0·기어P/N). 2단조작 포기(Q-56), 브레이크는 S2->S3 중립확인.
+    tr(ch, S.S1, S.S2, '[arm_rs_mutual_auth && arm_speed_zero && arm_gear_park_or_neutral && mode_req == REQ_TO_S2]', 3); % T05 인터록 3조건 AND (2단조작 포기)
     tr(ch, S.S1, S.S0, '[ig_key == IG_OFF]', 4);  % T04
 
     % ── S2 이탈 (우선순위) ──
