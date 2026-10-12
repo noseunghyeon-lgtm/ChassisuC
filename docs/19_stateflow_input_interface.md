@@ -1,87 +1,99 @@
-# Stateflow Input 데이터 정리 — ASW 인터페이스
+# Stateflow Input 데이터 정리 — ASW 인터페이스 (v0.7 기준)
 
-> ChassisuC 상태머신(`build_chassis_controller.m`)의 Input 데이터를 ASW 인터페이싱 기준으로 정리.
-> **사용/미사용 분류**, 명칭·타입 정합, 제거 후보를 제시해 heading(인터페이스 헤더) 일치를 돕는다.
-
----
-
-## 1. 전체 Input (29개) — 사용 분류
-
-범례: ✅ 상태머신 가드/during 에서 사용 · ⚠️ 현재 미사용(제거 후보) · 🔵 전처리 경유(간접)
-
-| # | 입력명 | 타입 | 사용 | 쓰이는 곳 | ASW 조치 |
-| --- | --- | --- | --- | --- | --- |
-| 1 | `ig_key` | Enum IgKey | ✅ | S0→INIT, S1→S0, S6→S0 | 유지 |
-| 2 | `wake_source` | boolean | ✅ | S0→INIT | 유지 |
-| 3 | `heartbeat_ok` | boolean | ✅ | S5→S2 | 유지 |
-| 4 | `heartbeat_age_ms` | uint16 | ✅ | S2/S3→S5, during | 유지 |
-| 5 | `video_hb_ok` | boolean | ⚠️ | **미사용** (영상 HB 경고는 상태천이 없음) | **제거 후보** → 경고는 ASW/HMI 측에서 |
-| 6 | `vc_net_level` | uint8 | ✅ | S3→S5(Stop), S5→S2 | 유지 |
-| 7 | `cc_net_level` | uint8 | ⚠️ | **미사용** (C19: 외부서 net_level 산출, 보조모니터) | **제거 후보** (외부 산출로 종결) |
-| 8 | `aebs_flag` | boolean | ✅ | S1/S2/S3→S4, S4 복귀, during | 유지 |
-| 9 | `ttc_s` | single | ⚠️ | **미사용** (C22: aebs_flag 로 대체, 참고용만) | **제거 후보** |
-| 10 | `fault_critical_confirmed` | boolean | ✅ | INIT/S1~S5→S6 | 유지 |
-| 11 | `fault_suspect` | boolean | ✅ | during (명령제한) | 유지 |
-| 12 | `fault_threatens_control` | boolean | ✅ | S1→S6 (유인 제어위협) | 유지 |
-| 13 | `estop_active` | boolean | ✅ | S1~S5→S6 (최우선) | 유지 |
-| 14 | `actuators_neutral` | boolean | ✅ | S2→S3 | 유지 (※ 세분화 검토) |
-| 15 | `first_valid_cmd` | boolean | ✅ | S2→S3 | 유지 |
-| 16 | `takeover_req` | boolean | ✅ | S3→S1 (테이크오버 B) | 유지 |
-| 17 | `manual_switch_req` | boolean | ✅ | S3→S2 (안전정지) | 유지 |
-| 18 | `mode_req` | Enum ModeReq | ✅ | S1↔S2, S3→S2 | 유지 |
-| 19 | `vehicle_speed` | single | ✅ | S3→S2, S5→S2 | 유지 |
-| 20 | `pedal_pos` | single | ⚠️ | **미사용** (캠 정합은 액션=설계문서, 코어 가드엔 없음) | **보류** — 이양 액션 구현 시 필요 |
-| 21 | `cam_at_origin` | boolean | ✅ | S2→S1 | 유지 |
-| 22 | `arm_rs_mutual_auth` | boolean | ✅ | S1→S2 (인터록①) | 유지 |
-| 23 | `arm_rmc_2stage` | boolean | ✅ | S1→S2 (인터록②) ⚠️Q-56 | 유지 |
-| 24 | `arm_speed_zero` | boolean | ✅ | S1→S2 (인터록③) | 유지 |
-| 25 | `arm_gear_park_or_neutral` | boolean | ✅ | S1→S2 (인터록④) | 유지 |
-| 26 | `gear_ready` | boolean | ✅ | INIT→S1 | 유지 |
-| 27 | `selftest_done` | boolean | ✅ | INIT→S1 | 유지 |
-| 28 | `init_timeout` | boolean | ✅ | INIT→S6 | 유지 |
-| 29 | `dtc_cleared` | boolean | ✅ | S6→S0 | 유지 |
+> ChassisuC 상태머신 Input 을 ASW 인터페이싱 기준으로 정리.
+> **★ v0.7 변경**: Control Computer(CC) **삭제 → Video Computer(VC) 통합** (DBC `KIA_ADUS_CAN_v0_7.dbc`).
+> CC 경로 신호 제거, 모드/E-Stop/net 중재 단순화.
 
 ---
 
-## 2. 제거/보류 후보 (ASW 인터페이스에서 뺄 것)
+## 0. v0.7 아키텍처 변경 요약
 
-| 입력 | 판정 | 근거 | 권고 |
-| --- | --- | --- | --- |
-| `video_hb_ok` | **제거** | 영상 HB 상실은 상태천이 없음(경고만, C12). 상태머신 입력 불필요 | ASW→HMI 경고 로직에서 처리, 상태머신 IN에서 삭제 |
-| `cc_net_level` | **제거** | net_level 산출이 외부(C19/C18 종결). 상태머신은 `vc_net_level`(통합값)만 수신 | 삭제. 통합 net_level 하나만 입력 |
-| `ttc_s` | **제거** | AEBS는 `aebs_flag`로 판정(C22). TTC 원시값 상태머신 미사용 | 삭제 (참고용 주석만) |
-| `pedal_pos` | **보류** | 코어 가드엔 없으나 S1→S2 캠 위치정합 **액션**에서 필요(§5). 액션 구현 시 사용 | 액션 포함 범위면 유지, 코어만이면 제거 |
+| 구분 | v0.6 (CC+VC) | v0.7 (VC 통합) |
+| --- | --- | --- |
+| 노드 | Control Computer + Video Computer | **Video_Computer 만** |
+| E-Stop | RS_E_STOP1(AA,CC) + RS_E_STOP2(AB,VC) | **RS_E_STOP2(AB) 만** |
+| Net | CC_Net_Status + VC_Net_Status | **VC_Net_Status 만** |
+| 명령 | RS_Chassis_Command1(CC)+2(VC) | **RS_Chassis_Command 1개** |
+| 모드 | Op_Mode_CC + Op_Mode_VC (중재) | **Chassis_Op_Mode 1개 (중재 불필요)** |
+| 신규 | — | Chassis_Status4 (Reject 신호들) |
 
-> **제거 3 + 보류 1.** 제거하면 Input **29 → 26개**.
-
----
-
-## 3. 명칭 정합 — ASW ↔ Stateflow heading
-
-ASW 측 신호명과 맞추기 위한 매핑 틀 (ASW 명칭은 사용자가 채워주세요):
-
-| Stateflow 입력 | 제안 ASW 신호명(예시) | CAN 소스(DB) | 비고 |
-| --- | --- | --- | --- |
-| `ig_key` | ? | — (KEYON 핀 K24) | enum IgKey |
-| `heartbeat_age_ms` | ? | CC_AliveCounter(1CFF90CC) | 전처리 산출 |
-| `vc_net_level` | ? | VC_Net_Level(1CFF90BC) | 외부 산출 수신 |
-| `aebs_flag` | ? | AEBS_AA/AB(RS_E_STOP1/2) | OR 중재 |
-| `estop_active` | ? | E_STOP_AA/AB + HW | OR 중재 |
-| `mode_req` | ? | Chassis_Op_Mode_CC/VC | 중재(C20) |
-| `vehicle_speed` | ? | Vehicle_Velocity(18FF71EF) | ×0.5 kph |
-| `fault_critical_confirmed` | ? | *_Status==7 | 「진단」 디바운스 |
-| `arm_*` (4) | ? | 인터록 조건별 | — |
-
-> **작업 방식**: ASW 측 실제 신호명을 위 표 "제안 ASW 신호명"에 채워 주시면,
-> Stateflow 입력명을 그에 맞춰 **일괄 리네임**하거나, 매핑 레이어(전처리)에서 연결하겠습니다.
+> 상태머신 발행: `Chassis_State_Machine_Status` = Chassis_Status3 bit24 (ADR-0039). 1:S0..7:S6, 0:Invalid.
 
 ---
 
-## 4. 다음 결정 (사용자)
+## 1. 최종 Input (26개) — ASW 인터페이스
 
-1. **제거 3건**(`video_hb_ok`, `cc_net_level`, `ttc_s`) 삭제할까요?
-2. **`pedal_pos`**: 코어만 생성(제거) vs 이양 액션 포함(유지)?
-3. **명칭 정합 방식**:
-   - (a) Stateflow 입력명을 **ASW 명칭으로 리네임**
-   - (b) 전처리/매핑 레이어에서 **ASW↔Stateflow 연결**(이름 유지)
-4. ASW 측 신호명 목록을 주시면 §3 표를 채워 heading 일치.
+범례: 모든 항목 상태머신 가드/during 에서 사용(✅). CAN 소스는 v0.7 DBC.
+
+| # | 입력명 | 타입 | 쓰임 | CAN 소스 (v0.7) |
+| --- | --- | --- | --- | --- |
+| 1 | `ig_key` | Enum IgKey | S0↔INIT↔S1↔S0 | KEYON 핀(K24) |
+| 2 | `wake_source` | boolean | S0→INIT | Wake |
+| 3 | `heartbeat_ok` | boolean | S5→S2 | VC_AliveCounter |
+| 4 | `heartbeat_age_ms` | uint16 | S2/S3→S5, during | VC_AliveCounter(전처리 산출) |
+| 5 | `vc_net_level` | uint8 | S3→S5, S5→S2 | VC_Net_Status.VC_Net_Level |
+| 6 | `aebs_flag` | boolean | →S4, S4복귀, during | RS_E_STOP2.AEBS_AB |
+| 7 | `fault_critical_confirmed` | boolean | →S6 | *_Status==Fault (「진단」) |
+| 8 | `fault_suspect` | boolean | during(명령제한) | 「진단」 |
+| 9 | `fault_threatens_control` | boolean | S1→S6 | 「안전」 |
+| 10 | `estop_active` | boolean | →S6 최우선 | HW + RS_E_STOP2.E_STOP_AB |
+| 11 | `actuators_neutral` | boolean | S2→S3 | 조작기 데드존(전처리) |
+| 12 | `first_valid_cmd` | boolean | S2→S3 | RS_Chassis_Command |
+| 13 | `takeover_req` | boolean | S3→S1(테이크오버 B) | 조향/제동 개입(전처리) |
+| 14 | `manual_switch_req` | boolean | S3→S2(안전정지) | RS 수동전환 요청 |
+| 15 | `mode_req` | Enum ModeReq | S1↔S2, S3→S2 | RS_Chassis_Command.Chassis_Op_Mode |
+| 16 | `vehicle_speed` | single | S3→S2, S5→S2 | Chassis_Status2.Vehicle_Velocity |
+| 17 | `cam_at_origin` | boolean | S2→S1 | BRK_Status |
+| 18 | `arm_rs_mutual_auth` | boolean | S1→S2 ① | 인증(SRS-SYS-013) |
+| 19 | `arm_rmc_2stage` | boolean | S1→S2 ② | Remote Panel(⚠️Q-56) |
+| 20 | `arm_speed_zero` | boolean | S1→S2 ③ | 차속0 |
+| 21 | `arm_gear_park_or_neutral` | boolean | S1→S2 ④ | 기어 P/N |
+| 22 | `gear_ready` | boolean | INIT→S1 | GA/GS_Status |
+| 23 | `selftest_done` | boolean | INIT→S1 | 자기진단 |
+| 24 | `init_timeout` | boolean | INIT→S6 | 타이머(SRS-039) |
+| 25 | `dtc_cleared` | boolean | S6→S0 | 「진단」 |
+| 26 | `pedal_pos` | single | (이양 액션 §5) | APP(가속페달) |
+
+> `pedal_pos`는 코어 가드엔 없고 **S1→S2 캠 정합 액션**에서 쓰임. 이양 액션 범위면 유지, 코어만이면 제거 가능.
+
+---
+
+## 2. v0.7 로 제거된 입력 (29→26)
+
+| 제거 입력 | 이유 |
+| --- | --- |
+| `video_hb_ok` | 영상 HB 상실=경고만(상태천이 없음, C12). ASW/HMI 측 처리 |
+| `cc_net_level` | **CC_Net_Status 삭제**(v0.7). net_level 은 VC 단독 |
+| `ttc_s` | AEBS=`aebs_flag` 판정(C22). TTC 원시값 미사용 |
+
+**연쇄 변경 (전처리/출력):**
+- `ArbitrateEStop`: HW+CC+VC(3경로) → **HW+VC(2경로)**
+- `ArbitrateModeReq`: CC/VC 중재 → **단일 소스 매핑**(중재 폐기)
+- 출력 `system_check_request` **제거** (CC/VC 불일치 없음 → C20 폐기)
+
+---
+
+## 3. 명칭 정합 — ASW ↔ Stateflow
+
+ASW 측 신호명을 아래에 채워주시면 리네임 or 매핑 레이어로 heading 일치:
+
+| Stateflow 입력 | ASW 신호명(채워주세요) | 비고 |
+| --- | --- | --- |
+| `ig_key` | ? | |
+| `heartbeat_age_ms` | ? | VC_AliveCounter 전처리 |
+| `vc_net_level` | ? | 외부 산출 수신 |
+| `aebs_flag` | ? | AEBS_AB |
+| `estop_active` | ? | HW+AB |
+| `mode_req` | ? | Chassis_Op_Mode |
+| `vehicle_speed` | ? | ×0.5 kph |
+| `fault_critical_confirmed` | ? | |
+| `arm_*` (4) | ? | 인터록 |
+| ... (전체 26개) | ? | |
+
+---
+
+## 4. 결정 사항
+1. **제거 3건** 확정 반영 (v0.7 CC 삭제 근거) ✅
+2. `pedal_pos`: 이양 액션 포함 여부 → 유지/제거
+3. 명칭 정합: (a) ASW명으로 리네임 vs (b) 매핑 레이어
+4. ASW 신호명 목록 공유 → §3 완성 → heading 일치
