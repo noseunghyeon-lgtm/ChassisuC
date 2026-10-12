@@ -98,6 +98,21 @@ CAN frame(0CFF50CC, 8B)
 
 ---
 
+## 단일 진입점 — `PreprocessInputs.m` (ASW heading)
+
+ASW raw 신호(struct `asw.*`) → Stateflow 입력(struct `sf.*`) 변환의 **단일 진입점**.
+입력 struct 필드명 = **ASW heading**(IGN_ON, VC_Net_Level, u8_HW_Fault, u8_Gear_Status 등),
+출력 struct 필드명 = Stateflow 입력 포트명. Simulink: Bus(ASW)→MATLAB Function→Bus(SF in).
+
+핵심 변환:
+- `aebs_flag = (u8_AEBS==7)`, `fault_critical_confirmed = (u8_HW_Fault!=0)`
+- `actuators_neutral = (u8_Gear_Status==6)`, `arm_gear_park_or_neutral = gear∈{0,6}`
+- `estop_active = estop_hw OR estop_can`, `takeover_req = steer OR estop OR MN`
+- `heartbeat_ok = ~VC_Communication_Fault`, `manual_switch_req = u8_MODE_MN`
+- 검증: Python 동치 테스트 통과(fault/neutral/estop/takeover 케이스).
+
+---
+
 ## 간소화 결정 (사용자 확정) — 신규 블록 미생성
 
 복잡한 신규 전처리 블록을 만들지 않고 **단순 연산/직접 입력**으로 처리:
