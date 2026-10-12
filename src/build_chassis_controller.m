@@ -72,29 +72,30 @@ function defineData(ch)
 
     % ---- 상태 발행 코드 상수 (Chassis_State_Machine_Status_VC) ----
     % ★ C21: DB Value Table 매칭 — 0:Invalid, 1:S0 .. 7:S6
-    addConst(ch, 'C_INVALID', '0');  % DB 0:Invalid (INIT 구간 발행값)
-    addConst(ch, 'C_S0',   '1');     % DB 1:S0
-    addConst(ch, 'C_S1',   '2');     % DB 2:S1
-    addConst(ch, 'C_S2',   '3');     % DB 3:S2
-    addConst(ch, 'C_S3',   '4');     % DB 4:S3
-    addConst(ch, 'C_S4',   '5');     % DB 5:S4
-    addConst(ch, 'C_S5',   '6');     % DB 6:S5
-    addConst(ch, 'C_S6',   '7');     % DB 7:S6
-    addConst(ch, 'C_INIT', '0');     % INIT 은 상태머신 미유효 → Invalid(0) 발행 (C02 해소)
+    % ★ C 코드생성 대상(D5) — 모든 상수/파라미터에 명시적 데이터타입 지정(double 추론 방지).
+    addConst(ch, 'C_INVALID', '0', 'uint8');  % DB 0:Invalid (INIT 구간 발행값)
+    addConst(ch, 'C_S0',   '1', 'uint8');     % DB 1:S0
+    addConst(ch, 'C_S1',   '2', 'uint8');     % DB 2:S1
+    addConst(ch, 'C_S2',   '3', 'uint8');     % DB 3:S2
+    addConst(ch, 'C_S3',   '4', 'uint8');     % DB 4:S3
+    addConst(ch, 'C_S4',   '5', 'uint8');     % DB 5:S4
+    addConst(ch, 'C_S5',   '6', 'uint8');     % DB 6:S5
+    addConst(ch, 'C_S6',   '7', 'uint8');     % DB 7:S6
+    addConst(ch, 'C_INIT', '0', 'uint8');     % INIT 은 상태머신 미유효 → Invalid(0) 발행 (C02 해소)
 
-    % ---- 파라미터 (확정값) ----
-    addParam(ch, 'HEARTBEAT_TIMEOUT_MS',   '400');  % SRS-SYS-007
-    addParam(ch, 'AEBS_BRAKE_TTC_S',       '0.8');  % 정본 §3.3
-    addParam(ch, 'AEBS_WARN_TTC_S',        '2.0');  % 상태천이 없음(경고)
-    addParam(ch, 'NET_LEVEL_STOP_MAX',     '1');    % net 0~1 → S5
-    addParam(ch, 'NET_LEVEL_DEGRADED_MAX', '4');    % net 2~4 → S3_Degraded
-    addParam(ch, 'NET_LEVEL_NORMAL_MIN',   '5');    % net 5~10 → S3_Normal
-    addParam(ch, 'DEGRADED_SPEED_LIMIT',   '10');   % km/h (확정)
+    % ---- 파라미터 (확정값) — 타입 명시 ----
+    addParam(ch, 'HEARTBEAT_TIMEOUT_MS',   '400', 'uint16'); % SRS-SYS-007 [ms]
+    addParam(ch, 'AEBS_BRAKE_TTC_S',       '0.8', 'single'); % 정본 §3.3 [s] (참고용)
+    addParam(ch, 'AEBS_WARN_TTC_S',        '2.0', 'single'); % 상태천이 없음(경고) [s]
+    addParam(ch, 'NET_LEVEL_STOP_MAX',     '1',   'uint8');  % net 0~1 → S5
+    addParam(ch, 'NET_LEVEL_DEGRADED_MAX', '4',   'uint8');  % net 2~4 → S3_Degraded
+    addParam(ch, 'NET_LEVEL_NORMAL_MIN',   '5',   'uint8');  % net 5~10 → S3_Normal
+    addParam(ch, 'DEGRADED_SPEED_LIMIT',   '10',  'single'); % km/h (확정)
     % ⚠️ 미확정 — 안전 가드가 확정 전 참이 되지 않도록 -1(무효) placeholder
-    addParam(ch, 'TBD_STANDSTILL_SPEED',   '-1');   % 차속0 임계 (C05)
-    addParam(ch, 'TBD_LED_BLINK_HZ',       '-1');   % LED 점멸주기 (C17)
-    addParam(ch, 'MC_STALE_FAIL_COUNT',    '10');   % MC 10회 연속 실패 → stale (C23/#6)
-    addParam(ch, 'MODE_PRIORITY_CC',       '1');    % CC 우선 (C20/#5)
+    addParam(ch, 'TBD_STANDSTILL_SPEED',   '-1',  'single'); % 차속0 임계 (C05)
+    addParam(ch, 'TBD_LED_BLINK_HZ',       '-1',  'single'); % LED 점멸주기 (C17)
+    addParam(ch, 'MC_STALE_FAIL_COUNT',    '10',  'uint8');  % MC 10회 연속 실패 → stale (C23/#6)
+    addParam(ch, 'MODE_PRIORITY_CC',       '1',   'uint8');  % CC 우선 (C20/#5)
 
     % ---- 입력 (데이터 딕셔너리 §2) ----
     inSpec = { ...
@@ -120,12 +121,11 @@ function defineData(ch)
         'pedal_pos','single'; ...
         'cam_at_origin','boolean'; ...
         % S1→S2 진입 6조건 (interlock, 모두 AND)
-        'arm_rs_mutual_auth','boolean'; ...
-        'arm_rmc_2stage','boolean'; ...        % ⚠️ Q-56 핀 부재 이슈
-        'arm_speed_zero','boolean'; ...
-        'arm_brake_pedal','boolean'; ...
-        'arm_brake_remote_set','boolean'; ...
-        'arm_gear_park','boolean'; ...
+        % S1→S2 인터록 — 정본 §3.3 4조건 (A1 확정: 4조건 정렬)
+        'arm_rs_mutual_auth','boolean'; ...    % ① RS 상호인증 (SRS-SYS-013)
+        'arm_rmc_2stage','boolean'; ...        % ② 2단 조작 (SRS-SYS-018) ⚠️ Q-56 핀 부재
+        'arm_speed_zero','boolean'; ...        % ③ 차속 0 (SRS-SYS-006)
+        'arm_gear_park_or_neutral','boolean'; ... % ④ 기어 P 또는 N (정본 §3.3)
         'gear_ready','boolean'; ...
         'selftest_done','boolean'; ...
         'init_timeout','boolean'; ...          % G2: INIT 자기진단 상한시간 초과 (SRS-SYS-039)
@@ -241,7 +241,8 @@ function createTransitions(ch, S)
     tr(ch, S.S1, S.S6, '[estop_active]', 0);  % TBD_ESTOP_TARGET (C01)
     tr(ch, S.S1, S.S6, '[fault_critical_confirmed || fault_threatens_control]', 1);  % T14 유인 S6(정책 TBD)
     tr(ch, S.S1, S.S4, '[aebs_flag]{prev_state_before_s4 = C_S1;}', 2); % T11 (C22: AEBS 플래그)
-    tr(ch, S.S1, S.S2, '[arm_rs_mutual_auth && arm_rmc_2stage && arm_speed_zero && arm_brake_pedal && arm_brake_remote_set && arm_gear_park && mode_req == REQ_TO_S2]', 3); % T05 6조건 AND
+    % T05 S1->S2: 정본 §3.3 인터록 4조건 AND (A1 확정). 브레이크 조건은 S2->S3 중립확인으로 이동.
+    tr(ch, S.S1, S.S2, '[arm_rs_mutual_auth && arm_rmc_2stage && arm_speed_zero && arm_gear_park_or_neutral && mode_req == REQ_TO_S2]', 3); % T05 4조건 AND
     tr(ch, S.S1, S.S0, '[ig_key == IG_OFF]', 4);  % T04
 
     % ── S2 이탈 (우선순위) ──
@@ -249,6 +250,8 @@ function createTransitions(ch, S)
     tr(ch, S.S2, S.S6, '[fault_critical_confirmed]', 1);                                  % T13
     tr(ch, S.S2, S.S5, '[heartbeat_age_ms > HEARTBEAT_TIMEOUT_MS]', 2);                   % T09
     tr(ch, S.S2, S.S4, '[aebs_flag]{prev_state_before_s4 = C_S2;}', 3);    % T11 (C22)
+    % T07 S2->S3: 전 조작기 중립(제동/가속/조향/기어 데드존) && 첫 유효명령.
+    %   actuators_neutral 에 제동 답력·원격설정 중립 포함(기존 arm_brake_* 를 여기로 이동, A1).
     tr(ch, S.S2, S.S3, '[actuators_neutral && first_valid_cmd]', 4);                      % T07
     tr(ch, S.S2, S.S1, '[mode_req == REQ_TO_S1 && cam_at_origin]', 5);                    % T06
 
@@ -303,15 +306,23 @@ function addIO(ch, name, scope, dataType)
     if nargin > 3 && ~isempty(dataType), d.DataType = dataType; end
 end
 
-function addConst(ch, name, val)
+function addConst(ch, name, val, dataType)
+    % 코드생성(C) 대상 — 상수에 명시적 데이터타입 지정(미지정 시 double 추론 방지).
     d = Stateflow.Data(ch); d.Name = name; d.Scope = 'Constant';
     d.Props.InitialValue = val;
+    if nargin > 3 && ~isempty(dataType)
+        d.DataType = dataType;
+    end
 end
 
-function addParam(ch, name, val)
+function addParam(ch, name, val, dataType)
     % 설계 상수는 Constant 스코프로 생성한다.
     % (Stateflow 의 Parameter 스코프 데이터는 차트 내 InitialValue 를 지원하지 않고,
     %  값이 MATLAB/모델 workspace 에서 와야 하므로 여기서는 Constant 를 사용)
+    % 코드생성(C) 대상 — 명시적 데이터타입 지정.
     d = Stateflow.Data(ch); d.Name = name; d.Scope = 'Constant';
     d.Props.InitialValue = val;
+    if nargin > 3 && ~isempty(dataType)
+        d.DataType = dataType;
+    end
 end
