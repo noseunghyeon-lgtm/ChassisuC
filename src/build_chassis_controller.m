@@ -113,6 +113,8 @@ function defineData(ch)
         'estop_active','boolean'; ...
         'actuators_neutral','boolean'; ...
         'first_valid_cmd','boolean'; ...
+        'takeover_req','boolean'; ...          % 운전자 물리 개입(조향/제동) → 테이크오버(B안): S3->S1 직접
+        'manual_switch_req','boolean'; ...     % 원격자(RS) 수동전환 요청 → 안전정지(S3->S2 과정)
         'mode_req','Enum: ModeReq'; ...
         'vehicle_speed','single'; ...
         'pedal_pos','single'; ...
@@ -256,7 +258,14 @@ function createTransitions(ch, S)
     % T09+net: net 0~1(Stop) 또는 HB 초과 → S5
     tr(ch, S.S3, S.S5, '[vc_net_level <= NET_LEVEL_STOP_MAX || heartbeat_age_ms > HEARTBEAT_TIMEOUT_MS]', 2);
     tr(ch, S.S3, S.S4, '[aebs_flag]{prev_state_before_s4 = C_S3;}', 3);    % T11 (C22)
-    tr(ch, S.S3, S.S2, '[mode_req == REQ_TO_S2 && vehicle_speed <= TBD_STANDSTILL_SPEED]', 4); % T08
+    % T16 테이크오버(B안): 운전자 물리 개입 → S3->S1 직접(금지천이 예외).
+    %   ⚠️ Q-118: 정본 §7/본설계 §7 의 'S3->S1 금지천이'에 대한 명시적 예외.
+    %   무충격 이양(§5) 미보장 위험 — 운전자 즉시 이어받기 우선(사용자 B안 확정).
+    %   우선순위: AEBS 다음(4), 모드전환보다 앞. (안전개입 vs 테이크오버 순위는 정책 확인)
+    tr(ch, S.S3, S.S1, '[takeover_req]', 4);  % T16 테이크오버 S3->S1 직접
+    % T08 안전정지(원격자 수동전환 요청): S3->S2 과정에서 감속→정지→P 시퀀스.
+    %   manual_switch_req(RS 요청) && 차속0. '안전정지 모드'는 이 전환의 한 동작(새 상태 아님).
+    tr(ch, S.S3, S.S2, '[(mode_req == REQ_TO_S2 || manual_switch_req) && vehicle_speed <= TBD_STANDSTILL_SPEED]', 5); % T08
 
     % ── S4 이탈 (우선순위) ──
     tr(ch, S.S4, S.S6, '[estop_active]', 0);  % G1 E-Stop 최우선 (C01 TBD)
@@ -272,7 +281,9 @@ function createTransitions(ch, S)
     % ── S6 이탈 ──
     tr(ch, S.S6, S.S0, '[ig_key == IG_OFF && dtc_cleared]');  % T15 비가역 이탈
 
-    % ---- 금지천이(§7)는 생성하지 않음: S3->S1 직접, S5->S3 직접, S6 원격이탈 없음.
+    % ---- 금지천이(§7): S5->S3 직접, S6 원격이탈 없음(미생성으로 차단).
+    %      S3->S1 은 원칙상 금지천이이나 ★테이크오버(B안, T16)만 예외 허용(takeover_req).
+    %      그 외 S3->S1 시도는 여전히 금지 — 런타임 감지→DTC 는 차트 감시(G6)에서 처리.
 end
 
 % ======================= 헬퍼 ========================================
