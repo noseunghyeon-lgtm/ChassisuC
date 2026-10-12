@@ -102,13 +102,16 @@
 | **전처리** (src/preproc) | ASW raw | 파생 플래그(§2) | 변환·OR·bit판별·중립판정 |
 | **Stateflow** | 파생 플래그(§2) | 상태 발행 | 상태 로직만 |
 
-### 6-2. heading 일치 = 전처리 입력을 ASW 와 맞춤
-전처리 블록(docs/15)의 **입력 인자명**을 ASW 신호명과 일치시킨다. 예:
-- `CheckHeartbeat(mc_raw,...)` → `VC_Communication_Fault` 또는 Alive 입력
+### 6-2. heading 일치 = 전처리 입력을 ASW 와 맞춤 (간소화 확정)
+전처리 블록(docs/15)의 **입력 인자명**을 ASW 신호명과 일치. 신규 블록 최소화:
+- `CheckHeartbeat` → `VC_Communication_Fault` (또는 Alive)
 - `ArbitrateEStop(hw, vc)` → `estop_hw`, `estop_can`
-- 신규 `ComputeFaultBits(accel,brake,gearActu,gearSel)` → 4 Fault → `fault_bits`(bit판별)
-- 신규 `ComputeNeutral(u8_Gear_Status)` → `actuators_neutral`
-- 신규 `ComputeInterlock(VC_Net_Link_Count, f_VehicleSpeed, u8_Gear_Status, u8_Req_Remote_Mode)` → arm_* 묶음
+- **치명고장**: 신규 블록 없음 → **`u8_HW_Fault`** 입력 하나(ASW가 4 Fault bitfield 제공).
+  `fault_critical_confirmed = (u8_HW_Fault != 0)`, 컴포넌트 판별은 비트 그대로 사용.
+- **중립**: 신규 블록 없음 → **`actuators_neutral = (u8_Gear_Status == 6)`** 직접 판정.
+- **인터록**: `ComputeInterlock` 블록 **삭제**. arm_* 는 각 신호에서 직접
+  (`arm_speed_zero=f_VehicleSpeed<=임계`, `arm_gear_park_or_neutral=u8_Gear_Status∈{0,6}`,
+  `arm_rs_mutual_auth=VC_Net_Link_Count` 기반).
 
 ### 6-3. Stateflow 입력은 유지 (파생 플래그)
 현행 26개 입력에서 **확정된 제거분만** 반영:

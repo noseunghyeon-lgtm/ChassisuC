@@ -95,3 +95,18 @@ CAN frame(0CFF50CC, 8B)
 - `ValidateHoldLast` 다중신호: persistent 단일 → 신호별 인스턴스 또는 배열화.
 - 디바운스 블록(노이즈 제거): 필요 시 N틱 연속 조건 블록 추가.
 - MC 10회 연속 실패 stale(C23): CheckCRC/CheckHeartbeat 와 결합한 stale 카운터 블록으로 확장.
+
+---
+
+## 간소화 결정 (사용자 확정) — 신규 블록 미생성
+
+복잡한 신규 전처리 블록을 만들지 않고 **단순 연산/직접 입력**으로 처리:
+
+| 당초 신규 블록 안 | 확정 |
+| --- | --- |
+| `ComputeFaultBits` (4 Fault → bitfield) | **미생성** — ASW 가 `u8_HW_Fault`(4 Fault bitfield) 를 직접 제공. `fault_critical_confirmed = (u8_HW_Fault != 0)`, 컴포넌트는 비트로 판별 |
+| `ComputeNeutral` | **미생성** — `actuators_neutral = (u8_Gear_Status == 6)` 직접 판정 |
+| `ComputeInterlock` | **삭제** — arm_* 는 각 신호에서 직접(speed/gear/net_link_count) |
+
+→ 전처리 블록은 기존 6개(CheckHeartbeat/CheckCRC/ArbitrateEStop/ArbitrateModeReq/ValidateHoldLast/ScalePhys)
+  + 위 단순 연산만. 블록 추가 없음.
