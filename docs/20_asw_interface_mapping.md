@@ -85,3 +85,31 @@ ASW 9개 중 상태머신이 쓰는 것은 **5개뿐**이고, `u8_Req_*` 4개는
 3. `VC_Communication_Fault` vs `heartbeat_ok`/`age_ms` — ASW가 fault bool 하나만 주나요?
 4. `u8_Req_*` 4개를 **제어 경로로 분리**하는 데 동의하시나요?
 5. 인터록(arm_*)·takeover·manual_switch 는 어느 ASW 신호로 들어오나요?
+
+---
+
+## 6. 번호 순서 매핑 (누적) — 사용자 제공분
+
+> Stateflow 입력 #번호에 ASW 신호를 순서대로 매핑. (받는 대로 갱신)
+
+| # | Stateflow 입력 | ASW 신호 | 상태 |
+| --- | --- | --- | --- |
+| 1 | `ig_key` | `IGN_ON` | 🔶 enum→bool |
+| 3 | `heartbeat_ok` | `VC_Communication_Fault` | 🔶 반전 |
+| 5 | `vc_net_level` | `VC_Net_Level` | ✅ |
+| 6 | `aebs_flag` | `u8_AEBS` | 🔶 u8→bool |
+| 14 | `manual_switch_req` | `u8_MODE_MN` | ⚠️ **확인**: 원격자 요청 vs 차량실내 Manual 스위치(K31)? |
+| 15 | `mode_req` | `u8_Req_Remote_Mode` | 🔶 enum |
+| 16 | `vehicle_speed` | `f_VehicleSpeed` | ✅ (single=f) |
+| 17 | `pedal_pos` | `u8_APP` | ✅ (가속페달) |
+
+**명령값(상태머신 외, 제어 경로):**
+`u8_Req_Gear_Position`, `u8_Req_Brake_Position`, `u16_Req_Steering_Angle`, `u8_Req_Throttle_Position`
+
+**미매핑 (ASW 신호 대기):**
+#2 wake_source, #4 heartbeat_age_ms, #7~9 fault_*, #10 estop_active,
+#11 actuators_neutral, #12 first_valid_cmd, #13 takeover_req,
+#18 cam_at_origin, #19~22 arm_*, #23 gear_ready, #24 selftest_done, #25 init_timeout, #26 dtc_cleared
+
+> ⚠️ #14 `u8_MODE_MN`: 핀맵 K31=MODE_MN(차량실내 Manual 스위치)과 동명. 원격자 수동전환(`manual_switch_req`)과
+> 주체가 다를 수 있음 — 확인 필요.
