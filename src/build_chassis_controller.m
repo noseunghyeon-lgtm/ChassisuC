@@ -72,29 +72,30 @@ function defineData(ch)
 
     % ---- 상태 발행 코드 상수 (Chassis_State_Machine_Status_VC) ----
     % ★ C21: DB Value Table 매칭 — 0:Invalid, 1:S0 .. 7:S6
-    addConst(ch, 'C_INVALID', '0');  % DB 0:Invalid (INIT 구간 발행값)
-    addConst(ch, 'C_S0',   '1');     % DB 1:S0
-    addConst(ch, 'C_S1',   '2');     % DB 2:S1
-    addConst(ch, 'C_S2',   '3');     % DB 3:S2
-    addConst(ch, 'C_S3',   '4');     % DB 4:S3
-    addConst(ch, 'C_S4',   '5');     % DB 5:S4
-    addConst(ch, 'C_S5',   '6');     % DB 6:S5
-    addConst(ch, 'C_S6',   '7');     % DB 7:S6
-    addConst(ch, 'C_INIT', '0');     % INIT 은 상태머신 미유효 → Invalid(0) 발행 (C02 해소)
+    % ★ C 코드생성 대상(D5) — 모든 상수/파라미터에 명시적 데이터타입 지정(double 추론 방지).
+    addConst(ch, 'C_INVALID', '0', 'uint8');  % DB 0:Invalid (INIT 구간 발행값)
+    addConst(ch, 'C_S0',   '1', 'uint8');     % DB 1:S0
+    addConst(ch, 'C_S1',   '2', 'uint8');     % DB 2:S1
+    addConst(ch, 'C_S2',   '3', 'uint8');     % DB 3:S2
+    addConst(ch, 'C_S3',   '4', 'uint8');     % DB 4:S3
+    addConst(ch, 'C_S4',   '5', 'uint8');     % DB 5:S4
+    addConst(ch, 'C_S5',   '6', 'uint8');     % DB 6:S5
+    addConst(ch, 'C_S6',   '7', 'uint8');     % DB 7:S6
+    addConst(ch, 'C_INIT', '0', 'uint8');     % INIT 은 상태머신 미유효 → Invalid(0) 발행 (C02 해소)
 
-    % ---- 파라미터 (확정값) ----
-    addParam(ch, 'HEARTBEAT_TIMEOUT_MS',   '400');  % SRS-SYS-007
-    addParam(ch, 'AEBS_BRAKE_TTC_S',       '0.8');  % 정본 §3.3
-    addParam(ch, 'AEBS_WARN_TTC_S',        '2.0');  % 상태천이 없음(경고)
-    addParam(ch, 'NET_LEVEL_STOP_MAX',     '1');    % net 0~1 → S5
-    addParam(ch, 'NET_LEVEL_DEGRADED_MAX', '4');    % net 2~4 → S3_Degraded
-    addParam(ch, 'NET_LEVEL_NORMAL_MIN',   '5');    % net 5~10 → S3_Normal
-    addParam(ch, 'DEGRADED_SPEED_LIMIT',   '10');   % km/h (확정)
+    % ---- 파라미터 (확정값) — 타입 명시 ----
+    addParam(ch, 'HEARTBEAT_TIMEOUT_MS',   '400', 'uint16'); % SRS-SYS-007 [ms]
+    addParam(ch, 'AEBS_BRAKE_TTC_S',       '0.8', 'single'); % 정본 §3.3 [s] (참고용)
+    addParam(ch, 'AEBS_WARN_TTC_S',        '2.0', 'single'); % 상태천이 없음(경고) [s]
+    addParam(ch, 'NET_LEVEL_STOP_MAX',     '1',   'uint8');  % net 0~1 → S5
+    addParam(ch, 'NET_LEVEL_DEGRADED_MAX', '4',   'uint8');  % net 2~4 → S3_Degraded
+    addParam(ch, 'NET_LEVEL_NORMAL_MIN',   '5',   'uint8');  % net 5~10 → S3_Normal
+    addParam(ch, 'DEGRADED_SPEED_LIMIT',   '10',  'single'); % km/h (확정)
     % ⚠️ 미확정 — 안전 가드가 확정 전 참이 되지 않도록 -1(무효) placeholder
-    addParam(ch, 'TBD_STANDSTILL_SPEED',   '-1');   % 차속0 임계 (C05)
-    addParam(ch, 'TBD_LED_BLINK_HZ',       '-1');   % LED 점멸주기 (C17)
-    addParam(ch, 'MC_STALE_FAIL_COUNT',    '10');   % MC 10회 연속 실패 → stale (C23/#6)
-    addParam(ch, 'MODE_PRIORITY_CC',       '1');    % CC 우선 (C20/#5)
+    addParam(ch, 'TBD_STANDSTILL_SPEED',   '-1',  'single'); % 차속0 임계 (C05)
+    addParam(ch, 'TBD_LED_BLINK_HZ',       '-1',  'single'); % LED 점멸주기 (C17)
+    addParam(ch, 'MC_STALE_FAIL_COUNT',    '10',  'uint8');  % MC 10회 연속 실패 → stale (C23/#6)
+    addParam(ch, 'MODE_PRIORITY_CC',       '1',   'uint8');  % CC 우선 (C20/#5)
 
     % ---- 입력 (데이터 딕셔너리 §2) ----
     inSpec = { ...
@@ -102,34 +103,29 @@ function defineData(ch)
         'wake_source','boolean'; ...
         'heartbeat_ok','boolean'; ...
         'heartbeat_age_ms','uint16'; ...
-        'video_hb_ok','boolean'; ...
         'vc_net_level','uint8'; ...            % 0~10 통신 네트워크 레벨 (VC, degradation 기준)
-        'cc_net_level','uint8'; ...            % 0~10 (CC, 보조 모니터 — C19 중재)
-        'aebs_flag','boolean'; ...             % ★ C22: AEBS 판정 결과 플래그(CC/VC OR). TTC 대체
-        'ttc_s','single'; ...                  % (참고용 유지, 가드는 aebs_flag 사용)
-        'fault_critical_confirmed','boolean'; ...
-        'fault_suspect','boolean'; ...
-        'fault_threatens_control','boolean'; ...
-        'estop_active','boolean'; ...
-        'actuators_neutral','boolean'; ...
+        'aebs_flag','boolean'; ...             % C22: AEBS 판정 결과 플래그(VC AEBS_AB). TTC 대체
+        % [v0.7 CC 삭제→VC 통합] 제거: video_hb_ok(천이없음), cc_net_level(CC Net 삭제), ttc_s(aebs_flag 대체)
+        'fault_critical_confirmed','boolean'; ... % 전처리: 4 HW Fault(Accel/Brake/GearActu/GearSel) OR
+        'estop_active','boolean'; ...          % 전처리: estop_hw OR estop_can
+        'actuators_neutral','boolean'; ...     % 전처리: u8_Gear_Status==6(N)
         'first_valid_cmd','boolean'; ...
-        'takeover_req','boolean'; ...          % 운전자 물리 개입(조향/제동) → 테이크오버(B안): S3->S1 직접
-        'manual_switch_req','boolean'; ...     % 원격자(RS) 수동전환 요청 → 안전정지(S3->S2 과정)
+        'takeover_req','boolean'; ...          % 전처리: 조향개입 OR estop OR MN스위치 → 테이크오버(B)
+        'manual_switch_req','boolean'; ...     % 전처리: u8_MODE_MN(차량실내 Manual 스위치)
+        % [확정 제거] fault_suspect, fault_threatens_control → fault_critical_confirmed(4 Fault OR)로 통합
         'mode_req','Enum: ModeReq'; ...
         'vehicle_speed','single'; ...
         'pedal_pos','single'; ...
         'cam_at_origin','boolean'; ...
         % S1→S2 진입 6조건 (interlock, 모두 AND)
-        'arm_rs_mutual_auth','boolean'; ...
-        'arm_rmc_2stage','boolean'; ...        % ⚠️ Q-56 핀 부재 이슈
-        'arm_speed_zero','boolean'; ...
-        'arm_brake_pedal','boolean'; ...
-        'arm_brake_remote_set','boolean'; ...
-        'arm_gear_park','boolean'; ...
+        % S1→S2 인터록 — 정본 §3.3 4조건에서 2단조작 포기 → 3조건 (RS인증·차속0·기어P/N)
+        'arm_rs_mutual_auth','boolean'; ...    % ① RS 상호인증 (VC_Net_Link_Count 기반)
+        'arm_speed_zero','boolean'; ...        % ② 차속 0 (f_VehicleSpeed)
+        'arm_gear_park_or_neutral','boolean'; ... % ③ 기어 P 또는 N (u8_Gear_Status 0:P/6:N)
+        % [2단조작 포기] arm_rmc_2stage 제거 — Q-56 현 HW 성립불가. 인터록 4→3조건.
         'gear_ready','boolean'; ...
-        'selftest_done','boolean'; ...
-        'init_timeout','boolean'; ...          % G2: INIT 자기진단 상한시간 초과 (SRS-SYS-039)
-        'dtc_cleared','boolean'};
+        'selftest_done','boolean'};            % 전처리: Tx IGN 기반
+        % [확정 제거] init_timeout(삭제), dtc_cleared(삭제 — S6 이탈은 IGN-OFF 단독)
     for i = 1:size(inSpec,1)
         addIO(ch, inSpec{i,1}, 'Input', inSpec{i,2});
     end
@@ -145,8 +141,8 @@ function defineData(ch)
         'video_hb_warn','boolean'; ...         % 영상 HB 경고(천이 없음)
         'speed_limit_active','boolean'; ...     % S3_Degraded
         'speed_limit_value','single'; ...
-        'degraded_led_blink','boolean'; ...     % S3_Degraded LED
-        'system_check_request','boolean'};      % CC/VC 모드 불일치 운영자 점검요청 (C20/#5)
+        'degraded_led_blink','boolean'};        % S3_Degraded LED
+        % [v0.7] system_check_request 제거 — CC 삭제로 모드 중재/불일치 없음(C20 폐기)
     for i = 1:size(outSpec,1)
         addIO(ch, outSpec{i,1}, 'Output', outSpec{i,2});
     end
@@ -207,10 +203,7 @@ function addChartDuringLogic(ch)
         'during:\n' ...
         ' %% --- G7: S4+S5 동시성립 플래그 (§3) ---\n' ...
         ' dual_s4s5_flag = (aebs_flag && (heartbeat_age_ms > HEARTBEAT_TIMEOUT_MS));\n' ...
-        ' %% --- G8: 고장 의심 → 원격명령 제한(상태 불변, §6-3) ---\n' ...
-        ' if (fault_suspect) \n' ...
-        '   remote_cmd_lock = true;\n' ...
-        ' end\n' ...
+        ' %% --- (G8 fault_suspect 제거: 치명고장은 fault_critical_confirmed=4 Fault OR 로 일원화) ---\n' ...
         ' %% --- G4: 자기진단 골격 (§8) — 상세 구현은 전처리/감시블록 ---\n' ...
         ' %% tick_overrun: 10ms 틱 초과 감시 (SRS-SYS-038)\n' ...
         ' %% state_integrity_ok: 상태변수 이중화(정·역보수) 비교\n' ...
@@ -234,14 +227,15 @@ function createTransitions(ch, S)
     % T02 INIT -> S1 (실패처리 TBD, C08)
     tr(ch, S.INIT, S.S1,  '[selftest_done && gear_ready]');
     % T03 INIT -> S6 : 자기진단 중 치명고장 확정 OR 상한시간 초과 (G2, 정본 §3.1)
-    tr(ch, S.INIT, S.S6,  '[fault_critical_confirmed || init_timeout]');
+    tr(ch, S.INIT, S.S6,  '[fault_critical_confirmed]');  % init_timeout 삭제(확정) — 자기진단 치명고장만
 
     % ── S1 이탈 (우선순위) ──
     % G1 T00: E-Stop 최우선(순위 0). 결과상태는 C01 미정 → 임시 S6(가장 보수적). 「안전」 확정 시 교체.
     tr(ch, S.S1, S.S6, '[estop_active]', 0);  % TBD_ESTOP_TARGET (C01)
-    tr(ch, S.S1, S.S6, '[fault_critical_confirmed || fault_threatens_control]', 1);  % T14 유인 S6(정책 TBD)
+    tr(ch, S.S1, S.S6, '[fault_critical_confirmed]', 1);  % T14 유인 S6 (fault_threatens_control 제거 — 4 Fault OR 로 통합)
     tr(ch, S.S1, S.S4, '[aebs_flag]{prev_state_before_s4 = C_S1;}', 2); % T11 (C22: AEBS 플래그)
-    tr(ch, S.S1, S.S2, '[arm_rs_mutual_auth && arm_rmc_2stage && arm_speed_zero && arm_brake_pedal && arm_brake_remote_set && arm_gear_park && mode_req == REQ_TO_S2]', 3); % T05 6조건 AND
+    % T05 S1->S2: 인터록 3조건 AND (RS인증·차속0·기어P/N). 2단조작 포기(Q-56), 브레이크는 S2->S3 중립확인.
+    tr(ch, S.S1, S.S2, '[arm_rs_mutual_auth && arm_speed_zero && arm_gear_park_or_neutral && mode_req == REQ_TO_S2]', 3); % T05 인터록 3조건 AND (2단조작 포기)
     tr(ch, S.S1, S.S0, '[ig_key == IG_OFF]', 4);  % T04
 
     % ── S2 이탈 (우선순위) ──
@@ -249,6 +243,8 @@ function createTransitions(ch, S)
     tr(ch, S.S2, S.S6, '[fault_critical_confirmed]', 1);                                  % T13
     tr(ch, S.S2, S.S5, '[heartbeat_age_ms > HEARTBEAT_TIMEOUT_MS]', 2);                   % T09
     tr(ch, S.S2, S.S4, '[aebs_flag]{prev_state_before_s4 = C_S2;}', 3);    % T11 (C22)
+    % T07 S2->S3: 전 조작기 중립(제동/가속/조향/기어 데드존) && 첫 유효명령.
+    %   actuators_neutral 에 제동 답력·원격설정 중립 포함(기존 arm_brake_* 를 여기로 이동, A1).
     tr(ch, S.S2, S.S3, '[actuators_neutral && first_valid_cmd]', 4);                      % T07
     tr(ch, S.S2, S.S1, '[mode_req == REQ_TO_S1 && cam_at_origin]', 5);                    % T06
 
@@ -279,7 +275,7 @@ function createTransitions(ch, S)
     tr(ch, S.S5, S.S2, '[heartbeat_ok && vc_net_level >= NET_LEVEL_NORMAL_MIN && vehicle_speed <= TBD_STANDSTILL_SPEED]', 2); % T10 (S2 경유 필수)
 
     % ── S6 이탈 ──
-    tr(ch, S.S6, S.S0, '[ig_key == IG_OFF && dtc_cleared]');  % T15 비가역 이탈
+    tr(ch, S.S6, S.S0, '[ig_key == IG_OFF]');  % T15 비가역 이탈 (dtc_cleared 삭제 확정 — IGN-OFF 단독. ⚠️정본 "DTC클리어" 요구와 차이)
 
     % ---- 금지천이(§7): S5->S3 직접, S6 원격이탈 없음(미생성으로 차단).
     %      S3->S1 은 원칙상 금지천이이나 ★테이크오버(B안, T16)만 예외 허용(takeover_req).
@@ -303,15 +299,23 @@ function addIO(ch, name, scope, dataType)
     if nargin > 3 && ~isempty(dataType), d.DataType = dataType; end
 end
 
-function addConst(ch, name, val)
+function addConst(ch, name, val, dataType)
+    % 코드생성(C) 대상 — 상수에 명시적 데이터타입 지정(미지정 시 double 추론 방지).
     d = Stateflow.Data(ch); d.Name = name; d.Scope = 'Constant';
     d.Props.InitialValue = val;
+    if nargin > 3 && ~isempty(dataType)
+        d.DataType = dataType;
+    end
 end
 
-function addParam(ch, name, val)
+function addParam(ch, name, val, dataType)
     % 설계 상수는 Constant 스코프로 생성한다.
     % (Stateflow 의 Parameter 스코프 데이터는 차트 내 InitialValue 를 지원하지 않고,
     %  값이 MATLAB/모델 workspace 에서 와야 하므로 여기서는 Constant 를 사용)
+    % 코드생성(C) 대상 — 명시적 데이터타입 지정.
     d = Stateflow.Data(ch); d.Name = name; d.Scope = 'Constant';
     d.Props.InitialValue = val;
+    if nargin > 3 && ~isempty(dataType)
+        d.DataType = dataType;
+    end
 end
