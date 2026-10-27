@@ -29,11 +29,12 @@
 | `REVIEW_CHECKLIST` | PR 리뷰 가이드 |
 
 ## 2. 코드 (src/)
-- `build_chassis_controller.m` — Chassis uC 메인 Stateflow 생성(정본명칭, S3=빈 composite, E-Stop/INIT타임아웃/during 포함)
+- `build_chassis_controller.m` — Chassis uC 메인 Stateflow 생성(정본명칭, S3=빈 composite, E-Stop/INIT타임아웃/during 포함). **S4 이탈 = 2중화 Remote 재진입(S4→S2 단일), `prev_state_before_s4` 폐기**
 - `build_remote_control_fsm.m` — (구) 초기 스크립트
 - `CalcCRC8_J1850.m` — CRC-8 SAE J1850 계산(poly 0x1D)
-- `preproc/` — 전처리 블록: CheckHeartbeat, CheckCRC, ArbitrateEStop, ArbitrateModeReq, ValidateHoldLast, ScalePhys
+- `preproc/` — 전처리 블록: CheckHeartbeat, CheckCRC, ArbitrateEStop, ArbitrateModeReq, ValidateHoldLast, ScalePhys, **DetectRemoteReengage(AEBS 해제 2중화 엣지검출)**
 - `tools/parse_xlsx.py` — xlsx 파서(stdlib)
+- `tools/verify_remote_reengage.py` — DetectRemoteReengage 동치검증(Python, 10케이스)
 
 ## 3. 데이터
 - `DB_ChassisuC.xlsx` — CAN DB (71 메시지 / 504 신호)

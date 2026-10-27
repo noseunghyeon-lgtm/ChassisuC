@@ -110,8 +110,9 @@ function defineData(ch)
         'estop_active','boolean'; ...          % 전처리: estop_hw OR estop_can
         'actuators_neutral','boolean'; ...     % 전처리: u8_Gear_Status==6(N)
         'first_valid_cmd','boolean'; ...
-        'takeover_req','boolean'; ...          % 전처리: 조향개입 OR estop OR MN스위치 → 테이크오버(B)
-        'manual_switch_req','boolean'; ...     % 전처리: u8_MODE_MN(차량실내 Manual 스위치)
+        'takeover_req','boolean'; ...          % 전처리: 조향개입 OR estop OR MN(Manual) → 테이크오버(B)
+        'manual_switch_req','boolean'; ...     % 전처리: u8_MODE_MN==Manual(차량 HW Manual 위치)
+        'remote_reengage_ok','boolean'; ...    % 전처리: AEBS 해제용 2중화 Remote 재진입(HW&&VC, Manual 경유 엣지). S4→S2 정상이탈
         % [확정 제거] fault_suspect, fault_threatens_control → fault_critical_confirmed(4 Fault OR)로 통합
         'mode_req','Enum: ModeReq'; ...
         'vehicle_speed','single'; ...
@@ -148,8 +149,9 @@ function defineData(ch)
     end
 
     % ---- 로컬 ----
+    %   [변경] prev_state_before_s4 폐기 — S4 이탈은 상태복귀가 아니라 2중화 Remote
+    %          재진입(remote_reengage_ok)으로 S2 단일 이탈. S4→S1 전이 없음.
     localSpec = { ...
-        'prev_state_before_s4','uint8'; ...
         'heartbeat_timer_ms','uint16'; ...
         'tick_overrun','boolean'; ...
         'state_integrity_ok','boolean'};
@@ -182,7 +184,10 @@ function S = createStates(ch)
                                   ' %% [사용자 작업] 서브상태 S3_Normal / S3_Degraded 추가\n' ...
                                   ' %% net 2~4: speed_limit_active=true, speed_limit_value=DEGRADED_SPEED_LIMIT, degraded_led_blink\n' ...
                                   ' %% net 0~1: S5 로 이탈 (아래 전이 참조)']);
-    S.S4.LabelString   = sprintf('S4_AEBS_OVERRIDE\nentry: veh_state_code = C_S4;');
+    S.S4.LabelString   = sprintf(['S4_AEBS_OVERRIDE\nentry: veh_state_code = C_S4;\n' ...
+                                  ' %% [재진입 latch 리셋] S4 활성 신호를 전처리(DetectRemoteReengage)로 전달,\n' ...
+                                  ' %% S4 진입 시 mn_reengaged/vc_reengaged/mn_reset_armed/vc_reset_armed=FALSE 초기화.\n' ...
+                                  ' %% 새 AEBS 이벤트마다 2단(Manual 경유) 조작을 2중화(HW&&VC)로 새로 요구.']);
     S.S5.LabelString   = sprintf(['S5_COMM_LOSS_BRAKE\nentry:\n veh_state_code = C_S5;\n' ...
                                   ' brake_req_src_state = 1.0;  %% 최대 제동(Stop 시퀀스)']);
     S.S6.LabelString   = sprintf(['S6_FAULT_SAFE_STATE\nentry:\n veh_state_code = C_S6; remote_cmd_lock = true;\n' ...
@@ -233,7 +238,7 @@ function createTransitions(ch, S)
     % G1 T00: E-Stop 최우선(순위 0). 결과상태는 C01 미정 → 임시 S6(가장 보수적). 「안전」 확정 시 교체.
     tr(ch, S.S1, S.S6, '[estop_active]', 0);  % TBD_ESTOP_TARGET (C01)
     tr(ch, S.S1, S.S6, '[fault_critical_confirmed]', 1);  % T14 유인 S6 (fault_threatens_control 제거 — 4 Fault OR 로 통합)
-    tr(ch, S.S1, S.S4, '[aebs_flag]{prev_state_before_s4 = C_S1;}', 2); % T11 (C22: AEBS 플래그)
+    tr(ch, S.S1, S.S4, '[aebs_flag]', 2); % T11 (C22: AEBS 플래그). prev_state 보관 폐기 — 해제 시 S2 단일이탈
     % T05 S1->S2: 인터록 3조건 AND (RS인증·차속0·기어P/N). 2단조작 포기(Q-56), 브레이크는 S2->S3 중립확인.
     tr(ch, S.S1, S.S2, '[arm_rs_mutual_auth && arm_speed_zero && arm_gear_park_or_neutral && mode_req == REQ_TO_S2]', 3); % T05 인터록 3조건 AND (2단조작 포기)
     tr(ch, S.S1, S.S0, '[ig_key == IG_OFF]', 4);  % T04
@@ -242,7 +247,7 @@ function createTransitions(ch, S)
     tr(ch, S.S2, S.S6, '[estop_active]', 0);  % G1 E-Stop 최우선 (C01 TBD)
     tr(ch, S.S2, S.S6, '[fault_critical_confirmed]', 1);                                  % T13
     tr(ch, S.S2, S.S5, '[heartbeat_age_ms > HEARTBEAT_TIMEOUT_MS]', 2);                   % T09
-    tr(ch, S.S2, S.S4, '[aebs_flag]{prev_state_before_s4 = C_S2;}', 3);    % T11 (C22)
+    tr(ch, S.S2, S.S4, '[aebs_flag]', 3);    % T11 (C22). prev_state 보관 폐기
     % T07 S2->S3: 전 조작기 중립(제동/가속/조향/기어 데드존) && 첫 유효명령.
     %   actuators_neutral 에 제동 답력·원격설정 중립 포함(기존 arm_brake_* 를 여기로 이동, A1).
     tr(ch, S.S2, S.S3, '[actuators_neutral && first_valid_cmd]', 4);                      % T07
@@ -253,7 +258,7 @@ function createTransitions(ch, S)
     tr(ch, S.S3, S.S6, '[fault_critical_confirmed]', 1);                                  % T13
     % T09+net: net 0~1(Stop) 또는 HB 초과 → S5
     tr(ch, S.S3, S.S5, '[vc_net_level <= NET_LEVEL_STOP_MAX || heartbeat_age_ms > HEARTBEAT_TIMEOUT_MS]', 2);
-    tr(ch, S.S3, S.S4, '[aebs_flag]{prev_state_before_s4 = C_S3;}', 3);    % T11 (C22)
+    tr(ch, S.S3, S.S4, '[aebs_flag]', 3);    % T11 (C22). prev_state 보관 폐기
     % T16 테이크오버(B안): 운전자 물리 개입 → S3->S1 직접(금지천이 예외).
     %   ⚠️ Q-118: 정본 §7/본설계 §7 의 'S3->S1 금지천이'에 대한 명시적 예외.
     %   무충격 이양(§5) 미보장 위험 — 운전자 즉시 이어받기 우선(사용자 B안 확정).
@@ -264,10 +269,14 @@ function createTransitions(ch, S)
     tr(ch, S.S3, S.S2, '[(mode_req == REQ_TO_S2 || manual_switch_req) && vehicle_speed <= TBD_STANDSTILL_SPEED]', 5); % T08
 
     % ── S4 이탈 (우선순위) ──
+    %   [변경 T12] prev_state_before_s4 폐기. 정상 이탈은 S4→S2 단일 경로.
+    %   AEBS 는 차속 0 까지 완전정지(조기 해제 없음). 해제 = VC 가 Remote→Manual→Remote
+    %   조작을 거쳐야 하며, 2중화(차량 HW u8_MODE_MN · VC Chassis_Op_Mode) 두 경로가
+    %   각각 Manual 경유 엣지 시퀀스를 만족(AND)해야 remote_reengage_ok=TRUE.
+    %   S4→S1 전이 없음(S1→S4였어도 해제 시 S2로). S2 에서 다시 Remote 조작으로 S2→S3 재진입.
     tr(ch, S.S4, S.S6, '[estop_active]', 0);  % G1 E-Stop 최우선 (C01 TBD)
     tr(ch, S.S4, S.S6, '[fault_critical_confirmed]', 1);                                  % T13
-    tr(ch, S.S4, S.S1, '[~aebs_flag && prev_state_before_s4 == C_S1]', 2); % T12 (C22: 해제=플래그 해제)
-    tr(ch, S.S4, S.S2, '[~aebs_flag && (prev_state_before_s4 == C_S2 || prev_state_before_s4 == C_S3)]', 3); % T12 (직전 S3→S2)
+    tr(ch, S.S4, S.S2, '[~aebs_flag && remote_reengage_ok]', 2); % T12: 유일한 정상 이탈(2중화+Manual경유 엣지)
 
     % ── S5 이탈 (우선순위) ──
     tr(ch, S.S5, S.S6, '[estop_active]', 0);  % G1 E-Stop 최우선 (C01 TBD)

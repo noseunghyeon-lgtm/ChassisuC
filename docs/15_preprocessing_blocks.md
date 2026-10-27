@@ -20,6 +20,7 @@
 | `ArbitrateModeReq.m` | opmode_cc, opmode_vc | **mode_req, system_check_request** | 모드 중재(CC 우선, 불일치→점검요청) C20 |
 | `ValidateHoldLast.m` | raw, invalid_val, reset | **value_out, valid** | Invalid 수신 시 마지막 유효값 유지 |
 | `ScalePhys.m` | raw, factor, offset | **phys** (double) | raw→물리값 (factor/offset) 135건 |
+| `DetectRemoteReengage.m` | u8_MODE_MN, Chassis_Op_Mode, reset | **remote_reengage_ok, mn_reengaged, vc_reengaged** (bool) | AEBS 해제용 2중화 Remote 재진입 엣지검출 (HW&&VC, Manual 경유, AND) — S4→S2 |
 | `CalcCRC8_J1850.m` (src/) | data_bytes | crc (u8) | CRC 계산 코어 (CheckCRC 가 호출) |
 
 ---
@@ -72,6 +73,21 @@ phys = raw*factor + offset
 ```
 - 예: 차속 raw×0.5[kph], 조향 raw×0.1-800[deg].
 
+## 7. AEBS 해제 2중화 재진입 — `DetectRemoteReengage` (S4→S2)
+```
+입력:  u8_MODE_MN(HW 모드 1:Manual/2:Remote), Chassis_Op_Mode(VC 0:Inv/1:Manual/2:RS), reset
+출력:  remote_reengage_ok(bool), mn_reengaged(bool), vc_reengaged(bool)
+HW:  u8_MODE_MN==Manual → mn_reset_armed=TRUE; mn_reset_armed && ==Remote → mn_reengaged=TRUE(latch)
+VC:  Chassis_Op_Mode==1  → vc_reset_armed=TRUE; vc_reset_armed && ==2     → vc_reengaged=TRUE(latch)
+합성: remote_reengage_ok = mn_reengaged && vc_reengaged        % AND (OR 아님)
+```
+- AEBS 는 차속 0까지 완전정지(조기 해제 없음). 해제는 **VC 가 Remote→Manual→Remote** 조작을 거쳐야 함.
+- 2중화 두 경로(차량 HW · VC CAN)를 **각각 독립**으로 Manual 경유 엣지 시퀀스 요구 → 둘 다 완료(AND)해야 유효.
+- `reset`(=S4 진입, `~s4_active`) 시 `mn/vc_reset_armed`·`mn/vc_reengaged` 모두 FALSE 초기화 →
+  새 AEBS 이벤트마다 2단 조작 재요구.
+- 검증: Python 동치 테스트 `tools/verify_remote_reengage.py` 10케이스 전부 통과
+  (엣지 시퀀스/AND/독립 타이밍/latch 유지/reset 재요구/Invalid noop).
+
 ---
 
 ## 데이터 흐름 예시 (원격 명령 메시지 RS_Chassis_Command1)
@@ -108,8 +124,9 @@ ASW raw 신호(struct `asw.*`) → Stateflow 입력(struct `sf.*`) 변환의 **�
 - `aebs_flag = (u8_AEBS==7)`, `fault_critical_confirmed = (u8_HW_Fault!=0)`
 - `actuators_neutral = (u8_Gear_Status==6)`, `arm_gear_park_or_neutral = gear∈{0,6}`
 - `estop_active = estop_hw OR estop_can`, `takeover_req = steer OR estop OR MN`
-- `heartbeat_ok = ~VC_Communication_Fault`, `manual_switch_req = u8_MODE_MN`
-- 검증: Python 동치 테스트 통과(fault/neutral/estop/takeover 케이스).
+- `heartbeat_ok = ~VC_Communication_Fault`, `manual_switch_req = (u8_MODE_MN==Manual)`
+- `remote_reengage_ok = DetectRemoteReengage(u8_MODE_MN, Chassis_Op_Mode, ~s4_active)` (AEBS 해제 2중화, S4→S2)
+- 검증: Python 동치 테스트 통과(fault/neutral/estop/takeover + remote_reengage 케이스).
 
 ---
 

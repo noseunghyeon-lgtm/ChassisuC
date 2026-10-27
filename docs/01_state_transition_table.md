@@ -78,8 +78,17 @@
 | --- | --- | --- | --- | --- | --- |
 | T09 | `S2`/`S3` | `S5` | Heartbeat 미수신 > 400ms | ① 즉시 최대 제동(변화율 제한 미적용) → ② 가속 0 강제 → ③ 기어 현위치 유지 → ④ 조향 마지막 각 유지 | — |
 | T10 | `S5` | `S2` | Heartbeat 복구 && 차속 0 | `S2` 경유 필수 (SRS-SYS-023). **`S5→S3` 직접 금지** | — |
-| T11 | `S1`/`S2`/`S3` | `S4` | AEBS 제동 판정 (TTC<0.8s) | 직전 상태 보관 → AEBS 제동 | — |
-| T12 | `S4` | (복귀) | AEBS 판정 해제 | `S4` 진입 직전 상태로 복귀. **단 직전이 `S3`이면 `S2`로 복귀** (§6-4). `S1`→`S4`→해제 시 `S1` 복귀 | — |
+| T11 | `S1`/`S2`/`S3` | `S4` | AEBS 제동 판정 (TTC<0.8s / `aebs_flag`) | AEBS 제동. **S4 진입 시 재진입 latch 초기화** (`mn/vc_reengaged`, `mn/vc_reset_armed`=FALSE) | — |
+| T12 | `S4` | `S2` | `~aebs_flag && remote_reengage_ok` | **AEBS 해제 = VC가 Remote→Manual→Remote 조작**. 2중화(차량 HW `u8_MODE_MN` · VC `Chassis_Op_Mode`) 두 경로가 **각각** Manual 경유 엣지 시퀀스를 만족(AND)해야 이탈. S2 진입 후 Remote 조작으로 S2→S3 재진입 | — |
+
+> **[변경 — S4 이탈 재설계]** 기존 `prev_state_before_s4` 기반 "직전 상태 복귀"(S4→S1/S2)를 **폐기**.
+> AEBS 가 작동하면 차속은 0까지 완전정지(조기 해제 없음)하며, 해제는 VC 가 Remote 버튼을
+> Manual 로 바꿨다가 다시 Remote 로 되돌리는 2단 조작을 거쳐야 한다. 이 조작을 **2중화**로 확인한다:
+> - **차량 HW 경로** `u8_MODE_MN`: `==Manual` 관측 시 `mn_reset_armed=TRUE`, 이후 `==Remote` 시 `mn_reengaged=TRUE`(latch).
+> - **VC CAN 경로** `Chassis_Op_Mode`(RS_Chassis_Command, 4bit, 0=Invalid/1=Manual/2=RS(Remote)): `==1` 관측 시 `vc_reset_armed=TRUE`, 이후 `==2` 시 `vc_reengaged=TRUE`(latch).
+> - **합성(AND)**: `remote_reengage_ok = mn_reengaged && vc_reengaged`. (E-Stop 은 안전측 OR 이지만 모드 재진입은 AND)
+> - 엣지 시퀀스는 두 경로 **독립**으로 요구. latch 는 S4 진입 시 모두 FALSE 로 초기화되어 새 AEBS 이벤트마다 2단 조작을 새로 요구.
+> - **`S4→S1` 전이 없음**: `S1→S4` 였어도 해제 시 `S2` 로 간다. 산출은 전처리 `DetectRemoteReengage.m` → 입력 `remote_reengage_ok`.
 
 ### 2.4 치명 고장 계열
 
