@@ -22,9 +22,11 @@
 | 11 | `estop_hw` | boolean | HW ESTOP | 하드와이어 |
 | 12 | `estop_can` | boolean | CAN ESTOP (RS_E_STOP2) | |
 | 13 | `fault_bits` | uint8 | 4개 HW Fault (bitfield) | **bit0:Accel, bit1:Brake, bit2:GearActu, bit3:GearSel** (확정 1) |
-| 14 | `mode_mn_switch` | boolean | `u8_MODE_MN` | 차량실내 Manual 스위치(확정 5) |
+| 14 | `u8_MODE_MN` | uint8 | `u8_MODE_MN` (K31 MODE_MN / K34 MODE_RM 전처리) | 차량 HW 수동/원격 모드값. **1:Manual 2:Remote**. (기존 bool "Manual 스위치" → uint8 모드값으로 승격) |
 | 15 | `steer_intervention` | boolean | 조향 개입 감지 | takeover용(확정 2) |
 | 16 | `tx_ign` | boolean | Tx IGN | selftest 판단 |
+| 17 | `Chassis_Op_Mode` | uint8 | CAN `RS_Chassis_Command.Chassis_Op_Mode` (VC 송신, 4bit) | VC 운용모드. **0:Invalid 1:Manual 2:RS(Remote)**. AEBS 해제 2중화 VC 경로 |
+| 18 | `s4_active` | boolean | 상태머신 S4 활성 (내부→전처리 피드백) | 재진입 latch 리셋용(S4 진입 시 초기화) |
 
 > 명령값(제어 경로, 상태머신 외): `u8_Req_Gear/Brake/Throttle`, `u16_Req_Steering`.
 
@@ -45,8 +47,9 @@
 | `gear_ready` | gear status Normal |
 | `heartbeat_ok` | `!vc_comm_fault` |
 | `selftest_done` | `tx_ign` 기반 |
-| `takeover_req` | `steer_intervention OR estop_active OR mode_mn_switch` (확정 2) |
-| `manual_switch_req` | `mode_mn_switch` (확정 5, 차량실내 Manual) |
+| `takeover_req` | `steer_intervention OR estop_active OR (u8_MODE_MN==Manual)` (확정 2) |
+| `manual_switch_req` | `u8_MODE_MN == Manual` (차량 HW Manual 위치) |
+| `remote_reengage_ok` | `DetectRemoteReengage(u8_MODE_MN, Chassis_Op_Mode, reset=~s4_active)` — 2중화 Remote 재진입. 두 경로 각각 Manual 경유 후 Remote 복귀(latch) → **AND**. S4→S2 정상이탈 조건 |
 
 ---
 
@@ -55,7 +58,7 @@
 | --- | --- |
 | `wake_source` | `ign_on` 에 통합 |
 | `first_valid_cmd` | 원격 명령 수신 내부 판정 |
-| `prev_state_before_s4` | S4 복귀용(기존) |
+| ~~`prev_state_before_s4`~~ | **폐기** — S4 이탈은 상태복귀가 아니라 `remote_reengage_ok`(2중화 Remote 재진입)으로 S2 단일 이탈. S4→S1 없음 |
 
 ---
 
