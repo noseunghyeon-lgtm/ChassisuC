@@ -34,8 +34,8 @@
 
 | 순위 | 조건 | 결과 상태 | 비고 |
 | --- | --- | --- | --- |
-| **0** | E-Stop 작동 | `[TBD]` | 「안전」 소관. 미정의 (§10) — 자리만 확보 |
-| **1** | 안전중요도 **치명** 고장 **확정** | `S6` | 확정 신호 수신 시. 디바운스는 「진단」 §4 소관 |
+| **0** | E-Stop 작동 | `S6` | ✅ C01 확정 — E-Stop → S6(FAULT_SAFE_STATE). S1~S5 모두 순위0 전이 |
+| **1** | 안전중요도 **치명** 고장 **확정** | `S6` | 확정 신호 수신 시. ✅ C04 확정: 디바운스 10틱×10ms=100ms(「진단」 §4) |
 | **2** | Heartbeat 미수신 (`S2`·`S3`에서만) | `S5` | 임계값 400ms (SRS-SYS-007) |
 | **3** | AEBS 제동 판정 | `S4` | TTC < 0.8s (SRS-SYS-003) |
 | **4** | 모드 전환 요청 | `S1`↔`S2`↔`S3` | 「원격/수동 전환」 소관 |
@@ -118,12 +118,12 @@
 
 | ID | 항목 | 소관 |
 | --- | --- | --- |
-| TBD_ESTOP_TARGET | E-Stop 결과 상태 (우선순위 0) | 「안전」 (§10) |
 | TBD_INIT_ENCODING | INIT 발행 코드 (임시 255) | CAN §2.2 (§10) |
-| TBD_FAULT_DEBOUNCE_N/T | 치명 고장 확정 디바운스 | SRS-SYS-038, 「진단」 §4 |
-| TBD_STANDSTILL_SPEED | 정지 판정 임계 차속 | 「기어 변속 판단」 |
 | TBD_S0_ENTRY_DELAY | S0 진입 지연 / Wake source | 「전원/Wake-up」 |
 | TBD_S6_MANNED_POLICY | 유인 S6 대응 정책 | 「안전」 + 기아 합의 |
 | TBD_INIT_S1_FAIL | INIT→S1 / S1→S0 실패 처리 | §12-3, 사용자 확정 |
 | TBD_DUAL_FLAG_BIT | S4+S5 동시성립 플래그 비트 | CAN §2.2 (§10) |
 | TBD_DTC_CLEAR | S6 이탈 DTC 클리어 경로 | SRS-SYS-037 |
+
+> ✅ **확정 완료(이 placeholder에서 해제)**: E-Stop 결과상태 = **S6**(C01) · 치명고장 디바운스 = **10틱×10ms=100ms**(C04, `DEBOUNCE_TICKS`/`TICK_MS`) · 정지 임계차속 = **0 kph**(C05, `STANDSTILL_SPEED_KPH`).
+> ✅ **종결**: 영상 HB 경고 임계시간(C13) — 상태머신 범위 밖(HMI/경고 계층 소관).

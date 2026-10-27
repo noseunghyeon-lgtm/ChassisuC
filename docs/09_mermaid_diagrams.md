@@ -150,7 +150,7 @@ stateDiagram-v2
 ```mermaid
 flowchart TD
     A["10ms tick 입력 수집"] --> P0{"E-Stop?"}
-    P0 -->|Yes| ES["우선순위 0 · 결과상태 TBD"]
+    P0 -->|Yes| ES["우선순위 0 · S6 발행 (C01 확정)"]
     P0 -->|No| P1{"치명고장 확정?"}
     P1 -->|Yes| S6["S6 발행"]
     P1 -->|No| P2{"HB timeout? (S2/S3)"}

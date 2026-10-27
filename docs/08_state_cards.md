@@ -105,8 +105,8 @@ RS 인증 완료·액추에이터 여자 완료. 아직 원격 명령을 수용�
 | From | 조건 (Guard) | 비고 |
 | --- | --- | --- |
 | S1 | `interlock_ok(6조건 AND) && mode_req == REQ_TO_S2` | 원격 진입 (T05). 캠 위치 정합 포함 |
-| S3 | `mode_req == REQ_TO_S2 && vehicle_speed <= STANDSTILL_SPEED` | 세션 종료 (T08). 차속0 미달 시 S3 유지 |
-| S5 | `heartbeat_ok && vehicle_speed <= STANDSTILL_SPEED` | 통신 복구 (T10). **S5→S3 직접 금지** |
+| S3 | `mode_req == REQ_TO_S2 && vehicle_speed <= STANDSTILL_SPEED_KPH` | 세션 종료 (T08). 차속0 미달 시 S3 유지 |
+| S5 | `heartbeat_ok && vehicle_speed <= STANDSTILL_SPEED_KPH` | 통신 복구 (T10). **S5→S3 직접 금지** |
 | S4 | AEBS 해제 && 직전상태 S2 또는 S3 | AEBS 복귀 (T12). 직전 S3 이어도 S2 로 (§6-4) |
 
 **이탈 조건 (나가는 천이):** *(우선순위 순)*
@@ -119,7 +119,7 @@ RS 인증 완료·액추에이터 여자 완료. 아직 원격 명령을 수용�
 | S3 | `actuators_neutral && first_valid_cmd` | 4 | 원격 추종 개시 (T07). 중립 미확인 시 금지 |
 | S1 | `mode_req == REQ_TO_S1 && cam_at_origin` | 5 | 원격 해제 (T06) |
 
-**미해결:** RP 2단 조작 핀 부재(C07/Q-56), STANDSTILL_SPEED(C05).
+**미해결:** RP 2단 조작 핀 부재(C07/Q-56). (C05 차속0 ✅확정: `STANDSTILL_SPEED_KPH=0`)
 
 ---
 
@@ -166,11 +166,11 @@ RS 인증 완료·액추에이터 여자 완료. 아직 원격 명령을 수용�
 | S6 | `fault_critical_confirmed` | 1 | 치명고장 확정 (T13) |
 | S5 | `vc_net_level <= 1` \|\| `heartbeat_age_ms > HEARTBEAT_TIMEOUT_MS` | 2 | **Stop**: net 0~1 또는 HB 초과 (T09) |
 | S4 | `ttc_s < AEBS_BRAKE_TTC_S` | 3 | AEBS 개입 (T11). 직전상태=S3 보관 |
-| S2 | `mode_req == REQ_TO_S2 && vehicle_speed <= STANDSTILL_SPEED` | 4 | 세션 종료 (T08). 차속0 미달 시 S3 유지 |
+| S2 | `mode_req == REQ_TO_S2 && vehicle_speed <= STANDSTILL_SPEED_KPH` | 4 | 세션 종료 (T08). 차속0 미달 시 S3 유지 |
 
 **금지 천이:** `S3 → S1` 직접 **금지** (반드시 S2 경유, §7). 시도 시 SW결함 DTC.
 
-**미해결:** 차속0(C05), LED 점멸주기(C17 일부). (C18 net_level 산출은 외부 수신으로 종결)
+**미해결:** LED 점멸주기(C17 일부). (C05 차속0 ✅확정 `STANDSTILL_SPEED_KPH=0`; C18 net_level 외부 수신 종결)
 
 ---
 
@@ -240,11 +240,11 @@ Heartbeat(명령 링크) 타임아웃으로 통신 단절 판정. 비상 제동 
 | To | 조건 (Guard) | 우선순위 | 비고 |
 | --- | --- | --- | --- |
 | S6 | `fault_critical_confirmed` | 1 | 치명고장 확정 (T13) |
-| S2 | `heartbeat_ok && vehicle_speed <= STANDSTILL_SPEED` | 2 | 통신 복구 (T10). **S2 경유 필수** |
+| S2 | `heartbeat_ok && vehicle_speed <= STANDSTILL_SPEED_KPH` | 2 | 통신 복구 (T10). **S2 경유 필수** |
 
 **금지 천이:** `S5 → S3` 직접 **금지** (반드시 S2 경유, §7 · SRS-SYS-023).
 
-**미해결:** STANDSTILL_SPEED(C05). (C06 Q-76 ✅해소)
+**미해결:** 없음. (C05 ✅확정 `STANDSTILL_SPEED_KPH=0`; C06 Q-76 ✅해소)
 
 ---
 
@@ -281,7 +281,7 @@ Heartbeat(명령 링크) 타임아웃으로 통신 단절 판정. 비상 제동 
 
 **금지 천이:** `S6` 에서 **원격 이탈 불가** (§7). 물리적 개입(IG-OFF 재기동) 필수.
 
-**미해결:** 디바운스 N·T(C04), DTC클리어(C10). (C03·C06·C14 ✅해소)
+**미해결:** DTC클리어(C10). (C04 디바운스 ✅확정 100ms=10틱×10ms; C03·C06·C14 ✅해소)
 
 ---
 

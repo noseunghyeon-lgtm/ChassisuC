@@ -7,12 +7,10 @@
 
 ## 1. 발견된 공백
 
-### 🔴 G1. E-Stop 미연결 (우선순위 0인데 전이 없음)
-- `estop_active` 입력은 정의됐으나 **어떤 전이의 가드에도 쓰이지 않음**.
-- §3 우선순위 0(최우선)인데 **구현 공백**. 결과 상태는 C01(미정)이라도, 최소한
-  **E-Stop 수신 시 즉시 안전상태로 가는 전이 자리**가 있어야 한다.
-- **조치**: E-Stop → 전용 안전처리. 임시로 `estop_active` 시 S5(제동) 또는 S6 로 가는
-  **최우선(ExecutionOrder=0) 전이**를 각 운용 상태에 추가하되 결과상태는 TBD 주석.
+### ✅ G1. E-Stop 전이 (우선순위 0) — 반영 완료 + C01 확정
+- `estop_active` 입력에 대해 S1~S5 각각 **최우선(ExecutionOrder=0) 전이**를 추가 완료.
+- ✅ **C01 확정**: 결과 상태 = **S6(FAULT_SAFE_STATE)**. (임시/TBD 해제)
+- **반영 위치**: `build_chassis_controller.m` 각 운용상태 이탈 전이 순위0.
 
 ### 🔴 G2. INIT 상한시간(타임아웃) 전이 누락
 - 정본 §3.1: "자기진단 실패 **또는 상한 시간 초과** → S6".
@@ -59,7 +57,7 @@
 
 | 공백 | 조치 | 반영 |
 | --- | --- | --- |
-| G1 E-Stop | `estop_active` 최우선(순위 0) 전이 — S1~S5 각각 → S6(임시). 결과상태 C01 TBD | ✅ 반영 |
+| G1 E-Stop | `estop_active` 최우선(순위 0) 전이 — S1~S5 각각 → **S6 (C01 ✅확정)** | ✅ 반영 |
 | G2 INIT 타임아웃 | `init_timeout` 입력 추가 + `INIT→S6` 가드에 OR | ✅ 반영 |
 | G4/G5 during | 차트 during: dual flag·fault_suspect 실동작 + 자기진단 골격(주석) | ✅ 반영 |
 | G7 dual flag | during 에서 `aebs_flag && hb_timeout` 시 set | ✅ 반영 |

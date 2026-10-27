@@ -92,10 +92,12 @@ function defineData(ch)
     addParam(ch, 'HEARTBEAT_TIMEOUT_MS', '400');   % SRS-SYS-007 (확정)
     addParam(ch, 'AEBS_BRAKE_TTC_S',     '0.8');   % 정본 §3.3 (확정)
     addParam(ch, 'AEBS_WARN_TTC_S',      '2.0');   % 정본 §3.3, 상태천이 없음
+    % ✅ C04 확정 — 치명고장 확정 디바운스: 10틱 × 10ms = 100ms 연속 지속 시 확정.
+    addParam(ch, 'DEBOUNCE_TICKS',       '10');    % 치명고장 확정 디바운스 틱수 (C04 확정)
+    addParam(ch, 'TICK_MS',              '10');    % 틱 주기 [ms] → DEBOUNCE_TICKS*TICK_MS=100ms (C04)
+    % ✅ C05 확정 — 정지 판정 임계 차속 0 kph. 가드는 vehicle_speed <= STANDSTILL_SPEED_KPH.
+    addParam(ch, 'STANDSTILL_SPEED_KPH', '0');     % 정지 판정 임계 차속 [kph] (C05 확정)
     % ⚠️ 아래는 미확정. 안전 관련이므로 0/큰값 등 임의값 대신 -1(무효) placeholder.
-    %    실제 값 확정 전에는 관련 가드가 절대 참이 되지 않도록 설계됨.
-    addParam(ch, 'TBD_FAULT_DEBOUNCE_N', '-1');    % SRS-SYS-038 / 「진단」§4
-    addParam(ch, 'TBD_STANDSTILL_SPEED', '-1');    % 「기어 변속 판단」
     addParam(ch, 'TBD_S0_ENTRY_DELAY',   '-1');    % 「전원/Wake-up」
 
     % ---- 입력 (모듈/센서 -> FSM) ----
@@ -262,7 +264,7 @@ function createTransitions(ch, S)
     % T11b S3 -> S4 (AEBS)
     tr(ch, S.S3, S.S4, '[ttc_s < AEBS_BRAKE_TTC_S]{prev_state_before_s4 = C_S3;}', 3);
     % T08  S3 -> S2 (세션 종료): 차속 0 미달 시 S3 유지
-    tr(ch, S.S3, S.S2, '[mode_req == REQ_TO_S2 && vehicle_speed <= TBD_STANDSTILL_SPEED]', 4);
+    tr(ch, S.S3, S.S2, '[mode_req == REQ_TO_S2 && vehicle_speed <= STANDSTILL_SPEED_KPH]', 4);
 
     % ── S1 에서 나가는 전이 ──
     % T14  S1 -> S6 (치명고장/제어위협) ─ 유인 대응정책 TBD(§6-2)
@@ -278,7 +280,7 @@ function createTransitions(ch, S)
     % S5 -> S6 (치명고장) 우선
     tr(ch, S.S5, S.S6, '[fault_critical_confirmed]', 1);
     % T10  S5 -> S2 : Heartbeat 복구 && 차속 0. S5->S3 직접 금지(§7)
-    tr(ch, S.S5, S.S2, '[heartbeat_ok && vehicle_speed <= TBD_STANDSTILL_SPEED]', 2);
+    tr(ch, S.S5, S.S2, '[heartbeat_ok && vehicle_speed <= STANDSTILL_SPEED_KPH]', 2);
 
     % ── S4 에서 나가는 전이 ──
     % S4 -> S6 (치명고장) 우선

@@ -38,13 +38,13 @@
 | `wake_source` | boolean | 0/1 | Wakeup 트리거 | 「전원/Wake-up」 |
 | `heartbeat_ok` | boolean | 0/1 | **원격(명령) Heartbeat** 정상 수신 — Control Computer | Control Computer/RS |
 | `heartbeat_age_ms` | uint16 | ms | 마지막 유효 원격 Heartbeat 경과시간 → S5 판정 | 통신 스택 |
-| `video_hb_ok` | boolean | 0/1 | **영상 Heartbeat** 정상 수신 — Video Streaming Computer. 상실 시 **경고만(상태천이 없음)** | Video Streaming Computer |
+| `video_hb_ok` | boolean | 0/1 | **영상 Heartbeat** 정상 수신 — Video Streaming Computer. 상실 시 **경고만(상태천이 없음)**. ✅ C13 **종결**: 경고 판정 임계시간은 상태머신 범위 밖(HMI/경고 계층 소관) | Video Streaming Computer |
 | `vc_net_level` | uint8 | 0~10 | **통신 네트워크 레벨** (CAN). 0~1=Stop(S5), 2~4=Degradation(S3_Degraded), 5~10=정상(S3_Normal) ✅확정 | VC(영상컴퓨터)/CAN. **외부 산출값 수신** — Chassis uC 내부 산출 없음(C18 종결) |
 | `ttc_s` | single | s | Time-To-Collision | AEBS (SRS-SYS-003) |
-| `fault_critical_confirmed` | boolean | 0/1 | **치명 고장 확정** 신호 | 「진단」 §4 |
+| `fault_critical_confirmed` | boolean | 0/1 | **치명 고장 확정** 신호. ✅ C04 확정: 검출 10틱×10ms=100ms 연속 지속 시 확정(`DebounceFaultCritical.m`) | 「진단」 §4 |
 | `fault_suspect` | boolean | 0/1 | 치명 고장 **의심**(상태 불변, 명령제한) | 「진단」 §4 |
 | `fault_threatens_control` | boolean | 0/1 | 고장이 운전자 제어 위협(캠 고착 등) | 「안전」 (§6-2) |
-| `estop_active` | boolean | 0/1 | E-Stop 작동 | 「안전」 (우선순위 0) |
+| `estop_active` | boolean | 0/1 | E-Stop 작동. ✅ C01 확정: 결과상태 = S6(FAULT_SAFE_STATE) | 「안전」 (우선순위 0) |
 | `interlock_ok` | boolean | 0/1 | ⚠️ **LEGACY** — "인터록 4조건" 뭉침. 아래 6조건 AND(`arm_*`)로 **대체**. §4 원문(4조건) vs 다이어그램(6조건) 불일치 → 정본 확정 필요 (점검표 M01) | §4 T05 |
 | `actuators_neutral` | boolean | 0/1 | 전 조작기 중립 | §4 T07 |
 | `first_valid_cmd` | boolean | 0/1 | 첫 유효 원격명령 수신 | §4 T07 |
@@ -90,7 +90,7 @@
 | --- | --- | --- |
 | `prev_state_before_s4` | enum `VehState` | S4 진입 직전 상태 보관 (§6-4 복귀용) |
 | `heartbeat_timer_ms` | uint16 | Heartbeat 미수신 누적 시간 |
-| `fault_debounce_cnt` | uint16 | 치명 고장 확정 디바운스 카운터 |
+| `fault_debounce_cnt` | uint16 | 치명 고장 확정 디바운스 카운터. ✅ C04: `DEBOUNCE_TICKS=10`(100ms) 도달 시 확정 |
 | `tick_overrun` | boolean | 10ms 틱 지연 감지 (§8) |
 | `state_integrity_ok` | boolean | 상태변수 이중화(정·역 보수) 비교 결과 |
 | `transition_log` | struct[N] | 천이 이력(시각·사유·요청원) (§8, SRS-SYS-040) |
@@ -107,9 +107,9 @@
 | `AEBS_WARN_TTC_S` | 2.0 | s | 정본 §3.3, **상태천이 없음**·HMI 경고만 |
 | `TWO_STAGE_TIMEOUT_S` | 3 | s | SRS-SYS-018 ⚠️ 현 패널 토폴로지로 성립 불가 (Q-56) |
 | `INIT_ENCODING` | 255 | — | ⚠️ **TBD** — CAN §2.2 (§10) |
-| `FAULT_DEBOUNCE_N` | `[TBD]` | 틱 | ⚠️ **TBD** — SRS-SYS-038 / 「진단」 §4 |
-| `FAULT_DEBOUNCE_T` | `[TBD]` | ms | ⚠️ **TBD** — SRS-SYS-038 / 「진단」 §4 |
-| `STANDSTILL_SPEED` | `[TBD]` | km/h | ⚠️ **TBD** — 「기어 변속 판단」 |
+| `DEBOUNCE_TICKS` | 10 | 틱 | ✅확정(C04) — 치명고장 확정 디바운스 틱수 (SRS-SYS-038/「진단」 §4) |
+| `TICK_MS` | 10 | ms | ✅확정(C04) — 틱 주기. `DEBOUNCE_TICKS×TICK_MS = 100ms` |
+| `STANDSTILL_SPEED_KPH` | 0 | km/h | ✅확정(C05) — 정지 판정 임계 차속. 가드 `vehicle_speed <= STANDSTILL_SPEED_KPH` |
 | `S0_ENTRY_DELAY` | `[TBD]` | ms | ⚠️ **TBD** — 「전원/Wake-up」 |
 | `NET_LEVEL_STOP_MAX` | 1 | — | Net Level 0~1 → S5(Stop) |
 | `NET_LEVEL_DEGRADED_MAX` | 4 | — | Net Level 2~4 → Degradation |

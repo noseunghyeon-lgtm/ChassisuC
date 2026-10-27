@@ -32,7 +32,7 @@
 - `build_chassis_controller.m` — Chassis uC 메인 Stateflow 생성(정본명칭, S3=빈 composite, E-Stop/INIT타임아웃/during 포함)
 - `build_remote_control_fsm.m` — (구) 초기 스크립트
 - `CalcCRC8_J1850.m` — CRC-8 SAE J1850 계산(poly 0x1D)
-- `preproc/` — 전처리 블록: CheckHeartbeat, CheckCRC, ArbitrateEStop, ArbitrateModeReq, ValidateHoldLast, ScalePhys
+- `preproc/` — 전처리 블록: CheckHeartbeat, CheckCRC, ArbitrateEStop, ArbitrateModeReq, ValidateHoldLast, ScalePhys, DebounceFaultCritical(C04)
 - `tools/parse_xlsx.py` — xlsx 파서(stdlib)
 
 ## 3. 데이터
@@ -47,7 +47,9 @@ Invalid=0, `S0`SLEEP=1, `S1`MANUAL=2, `S2`REMOTE_ARMED=3, `S3`REMOTE_ACTIVE=4,
 
 ## 5. 확정 사항 (주요)
 - 우선순위: E-Stop(0) > S6 > S5 > S4 > 모드. **Chassis uC 단독 관리**.
-- E-Stop: Hardwire 또는 CAN(E_STOP_AA/AB) 3경로 OR 수신. 결과상태 C01 TBD(임시 S6).
+- E-Stop: Hardwire 또는 CAN(E_STOP_AA/AB) 3경로 OR 수신. **결과상태 = S6 확정**(C01 해소, 임시/TBD 해제).
+- 치명고장 확정 디바운스(C04): **10틱 × 10ms = 100ms** 연속 지속 시 `fault_critical_confirmed`(DebounceFaultCritical.m).
+- 정지 판정 임계 차속(C05): **STANDSTILL_SPEED_KPH = 0 kph** (가드 `vehicle_speed <= STANDSTILL_SPEED_KPH`).
 - Heartbeat: Control(명령) 상실→S5 / Video(영상) 상실→경고만. **AliveCounter(MC) 정체 감시**.
 - S3 degradation: `vc_net_level`(0~10, 외부 산출 수신). 0~1=S5(Stop)/2~4=Degraded(속도10kph+LED)/5~10=Normal.
 - 유인 S6(C03): 최대제동 금지 + 원격기능만 잠금 + 원격모드 진입불가.
@@ -61,9 +63,10 @@ Invalid=0, `S0`SLEEP=1, `S1`MANUAL=2, `S2`REMOTE_ARMED=3, `S3`REMOTE_ACTIVE=4,
 - E-Stop 전이(S1~S5, 순위0) 추가, INIT 타임아웃→S6, 차트 during(dual_s4s5_flag/fault_suspect/자기진단 골격).
 
 ## 7. 미해결 (남은 것)
-- C01 E-Stop 결과상태(「안전」), C04 디바운스 N·T, C05 차속0 임계, C07 RMC핀(Q-56),
-  C08 INIT실패처리, C09 동시플래그 비트, C10 DTC클리어, C11 S0지연, C13 영상HB시간,
+- C07 RMC핀(Q-56), C08 INIT실패처리, C09 동시플래그 비트, C10 DTC클리어, C11 S0지연,
   C15 E-Stop HW/CAN중재, C17 LED점멸주기. G3/G6/G9(상태머신 확인항목).
+- ✅ 이번 해소: C01(E-Stop→S6 확정), C04(디바운스 100ms), C05(차속0 임계=0kph).
+  C13(영상HB 임계시간)은 **종결**(상태머신 범위 밖, HMI/경고 계층 소관).
 
 ## 8. GitHub 이력
 - PR #1,#7,#8,#9,#10 머지됨. Issue #2~#6(C03/C06/C19/C20/C23) 전부 해소·닫힘.
@@ -77,4 +80,4 @@ Invalid=0, `S0`SLEEP=1, `S1`MANUAL=2, `S2`REMOTE_ARMED=3, `S3`REMOTE_ACTIVE=4,
 ## 10. 다음 액션
 - 핀맵 문서(16) PR 생성·머지.
 - S3 서브상태(Normal/Degraded) 구현(사용자 영역).
-- 남은 수치 확정(C04/C05/C13/C17).
+- 남은 수치 확정(C17 LED 점멸주기). (C04/C05 ✅확정, C13 종결, C01 ✅확정)

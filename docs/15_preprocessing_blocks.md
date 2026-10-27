@@ -20,6 +20,7 @@
 | `ArbitrateModeReq.m` | opmode_cc, opmode_vc | **mode_req, system_check_request** | 모드 중재(CC 우선, 불일치→점검요청) C20 |
 | `ValidateHoldLast.m` | raw, invalid_val, reset | **value_out, valid** | Invalid 수신 시 마지막 유효값 유지 |
 | `ScalePhys.m` | raw, factor, offset | **phys** (double) | raw→물리값 (factor/offset) 135건 |
+| `DebounceFaultCritical.m` | fault_critical_raw, reset | **fault_critical_confirmed** (bool) | 치명고장 검출→확정 디바운스 100ms (C04) |
 | `CalcCRC8_J1850.m` (src/) | data_bytes | crc (u8) | CRC 계산 코어 (CheckCRC 가 호출) |
 
 ---
@@ -72,6 +73,18 @@ phys = raw*factor + offset
 ```
 - 예: 차속 raw×0.5[kph], 조향 raw×0.1-800[deg].
 
+## 7. 치명고장 확정 디바운스 — `DebounceFaultCritical` (C04)
+```
+fault_critical_raw = accel_fault OR brake_fault OR gearactu_fault OR gearsel_fault  % u8_HW_Fault 4비트 OR
+입력:  fault_critical_raw(bool), reset
+출력:  fault_critical_confirmed(bool)
+로직:  raw True → cnt++ (DEBOUNCE_TICKS 포화), raw False → cnt=0 (연속 지속 요구)
+       confirmed = (cnt >= DEBOUNCE_TICKS)
+```
+- ✅ **C04 확정**: `DEBOUNCE_TICKS=10 × TICK_MS=10ms = 100ms` 연속 지속 시 확정(M02 "검출≠확정").
+- 중간에 한 틱이라도 해제되면 카운터 리셋(연속 지속 요구). 래치 없음(현 틱 기준).
+- 검증: `tools/verify_fault_debounce.py` 6개 시나리오 PASS (동치검증, MATLAB 미설치 환경).
+
 ---
 
 ## 데이터 흐름 예시 (원격 명령 메시지 RS_Chassis_Command1)
@@ -91,7 +104,7 @@ CAN frame(0CFF50CC, 8B)
 ---
 
 ## 미해결 / 확장 포인트
-- 영상 HB 경고 임계시간(C13): 현재 TIMEOUT=400 고정 → 영상용은 파라미터화 필요.
+- 영상 HB 경고 임계시간(C13): ✅ **종결** — 상태머신 범위 밖(HMI/경고 계층 소관). 영상 HB 는 상태천이를 유발하지 않는 경고 전용이므로 전처리/상태머신에 추가하지 않음.
 - `ValidateHoldLast` 다중신호: persistent 단일 → 신호별 인스턴스 또는 배열화.
-- 디바운스 블록(노이즈 제거): 필요 시 N틱 연속 조건 블록 추가.
+- 치명고장 확정 디바운스(C04): ✅ **반영** — `DebounceFaultCritical.m` (DEBOUNCE_TICKS=10 × TICK_MS=10ms = 100ms 연속 지속 시 확정).
 - MC 10회 연속 실패 stale(C23): CheckCRC/CheckHeartbeat 와 결합한 stale 카운터 블록으로 확장.

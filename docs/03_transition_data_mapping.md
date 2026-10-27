@@ -19,9 +19,9 @@
 | T05 | `S1→S2` | `interlock_ok`(I), `mode_req`(I), `pedal_pos`(I)* | `veh_state_code`(O) | — |
 | T06 | `S2→S1` | `mode_req`(I), `cam_at_origin`(I) | `veh_state_code`(O), `remote_cmd_lock`(O) | — |
 | T07 | `S2→S3` | `actuators_neutral`(I), `first_valid_cmd`(I) | `veh_state_code`(O) | — |
-| T08 | `S3→S2` | `mode_req`(I), `vehicle_speed`(I) | `veh_state_code`(O) | `TBD_STANDSTILL_SPEED` |
+| T08 | `S3→S2` | `mode_req`(I), `vehicle_speed`(I) | `veh_state_code`(O) | `STANDSTILL_SPEED_KPH`=0 ✅ |
 | T09 | `S2/S3→S5` | `heartbeat_age_ms`(I) | `veh_state_code`(O), `brake_req_src_state`(O) | — |
-| T10 | `S5→S2` | `heartbeat_ok`(I), `vehicle_speed`(I) | `veh_state_code`(O) | `TBD_STANDSTILL_SPEED` |
+| T10 | `S5→S2` | `heartbeat_ok`(I), `vehicle_speed`(I) | `veh_state_code`(O) | `STANDSTILL_SPEED_KPH`=0 ✅ |
 | T11 | `S1/S2/S3→S4` | `ttc_s`(I) | `veh_state_code`(O), `prev_state_before_s4`(L) | — |
 | T12 | `S4→복귀` | `ttc_s`(I), `prev_state_before_s4`(L) | `veh_state_code`(O) | — |
 | T13 | `무인→S6` | `fault_critical_confirmed`(I) | `veh_state_code`(O), `remote_cmd_lock`(O), `brake_req_src_state`(O) | — |
@@ -58,8 +58,8 @@
 | `AEBS_WARN_TTC_S` | 2.0 | (상태천이 없음 — HMI 경고 전용) |
 | `C_S0`~`C_S6` | 0~6 | 전 상태 entry (veh_state_code), T11/T12 (prev_state 비교) |
 | `C_INIT` | 255 `[TBD]` | INIT entry |
-| `TBD_STANDSTILL_SPEED` | -1(무효) | T08, T10 |
-| `TBD_FAULT_DEBOUNCE_N` | -1(무효) | 「진단」§4 디바운스(외부), 확정 신호 소비 |
+| `STANDSTILL_SPEED_KPH` | 0 ✅확정(C05) | T08, T10 (`vehicle_speed <= STANDSTILL_SPEED_KPH`) |
+| `DEBOUNCE_TICKS` / `TICK_MS` | 10 / 10 ✅확정(C04) | 디바운스 100ms → `fault_critical_confirmed` 산출(`DebounceFaultCritical.m`) |
 | `TBD_S0_ENTRY_DELAY` | -1(무효) | S0 진입 지연(외부 타이밍) |
 
 ---

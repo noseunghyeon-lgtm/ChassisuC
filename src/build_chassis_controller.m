@@ -90,9 +90,13 @@ function defineData(ch)
     addParam(ch, 'NET_LEVEL_DEGRADED_MAX', '4');    % net 2~4 → S3_Degraded
     addParam(ch, 'NET_LEVEL_NORMAL_MIN',   '5');    % net 5~10 → S3_Normal
     addParam(ch, 'DEGRADED_SPEED_LIMIT',   '10');   % km/h (확정)
-    % ⚠️ 미확정 — 안전 가드가 확정 전 참이 되지 않도록 -1(무효) placeholder
-    addParam(ch, 'TBD_STANDSTILL_SPEED',   '-1');   % 차속0 임계 (C05)
-    addParam(ch, 'TBD_LED_BLINK_HZ',       '-1');   % LED 점멸주기 (C17)
+    % ✅ C05 확정 — 정지 판정 임계 차속 0 kph. 가드는 vehicle_speed <= STANDSTILL_SPEED_KPH.
+    addParam(ch, 'STANDSTILL_SPEED_KPH',   '0');    % 정지 판정 임계 차속 [kph] (C05 확정)
+    % ✅ C04 확정 — 치명고장 확정 디바운스: 10틱 × 10ms = 100ms 연속 지속 시 확정.
+    addParam(ch, 'DEBOUNCE_TICKS',         '10');   % 치명고장 확정 디바운스 틱수 (C04 확정)
+    addParam(ch, 'TICK_MS',                '10');   % 틱 주기 [ms] → DEBOUNCE_TICKS*TICK_MS=100ms (C04)
+    % 🔶 미확정(C17) — 안전 가드가 확정 전 참이 되지 않도록 -1(무효) placeholder
+    addParam(ch, 'TBD_LED_BLINK_HZ',       '-1');   % LED 점멸주기 (C17, 범위 밖 — 유지)
     addParam(ch, 'MC_STALE_FAIL_COUNT',    '10');   % MC 10회 연속 실패 → stale (C23/#6)
     addParam(ch, 'MODE_PRIORITY_CC',       '1');    % CC 우선 (C20/#5)
 
@@ -237,15 +241,15 @@ function createTransitions(ch, S)
     tr(ch, S.INIT, S.S6,  '[fault_critical_confirmed || init_timeout]');
 
     % ── S1 이탈 (우선순위) ──
-    % G1 T00: E-Stop 최우선(순위 0). 결과상태는 C01 미정 → 임시 S6(가장 보수적). 「안전」 확정 시 교체.
-    tr(ch, S.S1, S.S6, '[estop_active]', 0);  % TBD_ESTOP_TARGET (C01)
+    % G1 T00: E-Stop 최우선(순위 0). 결과상태 = S6(FAULT_SAFE_STATE) 정식 확정(C01 ✅).
+    tr(ch, S.S1, S.S6, '[estop_active]', 0);  % E-Stop → S6 (C01 확정)
     tr(ch, S.S1, S.S6, '[fault_critical_confirmed || fault_threatens_control]', 1);  % T14 유인 S6(정책 TBD)
     tr(ch, S.S1, S.S4, '[aebs_flag]{prev_state_before_s4 = C_S1;}', 2); % T11 (C22: AEBS 플래그)
     tr(ch, S.S1, S.S2, '[arm_rs_mutual_auth && arm_rmc_2stage && arm_speed_zero && arm_brake_pedal && arm_brake_remote_set && arm_gear_park && mode_req == REQ_TO_S2]', 3); % T05 6조건 AND
     tr(ch, S.S1, S.S0, '[ig_key == IG_OFF]', 4);  % T04
 
     % ── S2 이탈 (우선순위) ──
-    tr(ch, S.S2, S.S6, '[estop_active]', 0);  % G1 E-Stop 최우선 (C01 TBD)
+    tr(ch, S.S2, S.S6, '[estop_active]', 0);  % G1 E-Stop 최우선 → S6 (C01 확정)
     tr(ch, S.S2, S.S6, '[fault_critical_confirmed]', 1);                                  % T13
     tr(ch, S.S2, S.S5, '[heartbeat_age_ms > HEARTBEAT_TIMEOUT_MS]', 2);                   % T09
     tr(ch, S.S2, S.S4, '[aebs_flag]{prev_state_before_s4 = C_S2;}', 3);    % T11 (C22)
@@ -253,7 +257,7 @@ function createTransitions(ch, S)
     tr(ch, S.S2, S.S1, '[mode_req == REQ_TO_S1 && cam_at_origin]', 5);                    % T06
 
     % ── S3 이탈 (우선순위) ── S3 내부(Normal/Degraded)는 사용자 작업.
-    tr(ch, S.S3, S.S6, '[estop_active]', 0);  % G1 E-Stop 최우선 (C01 TBD)
+    tr(ch, S.S3, S.S6, '[estop_active]', 0);  % G1 E-Stop 최우선 → S6 (C01 확정)
     tr(ch, S.S3, S.S6, '[fault_critical_confirmed]', 1);                                  % T13
     % T09+net: net 0~1(Stop) 또는 HB 초과 → S5
     tr(ch, S.S3, S.S5, '[vc_net_level <= NET_LEVEL_STOP_MAX || heartbeat_age_ms > HEARTBEAT_TIMEOUT_MS]', 2);
@@ -265,18 +269,18 @@ function createTransitions(ch, S)
     tr(ch, S.S3, S.S1, '[takeover_req]', 4);  % T16 테이크오버 S3->S1 직접
     % T08 안전정지(원격자 수동전환 요청): S3->S2 과정에서 감속→정지→P 시퀀스.
     %   manual_switch_req(RS 요청) && 차속0. '안전정지 모드'는 이 전환의 한 동작(새 상태 아님).
-    tr(ch, S.S3, S.S2, '[(mode_req == REQ_TO_S2 || manual_switch_req) && vehicle_speed <= TBD_STANDSTILL_SPEED]', 5); % T08
+    tr(ch, S.S3, S.S2, '[(mode_req == REQ_TO_S2 || manual_switch_req) && vehicle_speed <= STANDSTILL_SPEED_KPH]', 5); % T08 (C05 확정)
 
     % ── S4 이탈 (우선순위) ──
-    tr(ch, S.S4, S.S6, '[estop_active]', 0);  % G1 E-Stop 최우선 (C01 TBD)
+    tr(ch, S.S4, S.S6, '[estop_active]', 0);  % G1 E-Stop 최우선 → S6 (C01 확정)
     tr(ch, S.S4, S.S6, '[fault_critical_confirmed]', 1);                                  % T13
     tr(ch, S.S4, S.S1, '[~aebs_flag && prev_state_before_s4 == C_S1]', 2); % T12 (C22: 해제=플래그 해제)
     tr(ch, S.S4, S.S2, '[~aebs_flag && (prev_state_before_s4 == C_S2 || prev_state_before_s4 == C_S3)]', 3); % T12 (직전 S3→S2)
 
     % ── S5 이탈 (우선순위) ──
-    tr(ch, S.S5, S.S6, '[estop_active]', 0);  % G1 E-Stop 최우선 (C01 TBD)
+    tr(ch, S.S5, S.S6, '[estop_active]', 0);  % G1 E-Stop 최우선 → S6 (C01 확정)
     tr(ch, S.S5, S.S6, '[fault_critical_confirmed]', 1);                                  % T13
-    tr(ch, S.S5, S.S2, '[heartbeat_ok && vc_net_level >= NET_LEVEL_NORMAL_MIN && vehicle_speed <= TBD_STANDSTILL_SPEED]', 2); % T10 (S2 경유 필수)
+    tr(ch, S.S5, S.S2, '[heartbeat_ok && vc_net_level >= NET_LEVEL_NORMAL_MIN && vehicle_speed <= STANDSTILL_SPEED_KPH]', 2); % T10 (S2 경유 필수, C05 확정)
 
     % ── S6 이탈 ──
     tr(ch, S.S6, S.S0, '[ig_key == IG_OFF && dtc_cleared]');  % T15 비가역 이탈

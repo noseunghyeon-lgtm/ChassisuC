@@ -35,7 +35,7 @@
    통신두절/치명고장 시 조향을 고정할지, 어느 각으로 둘지 미확정. 안전상 중요 → 조기 확정 필요.
 
 5. **⚠️ S3 Gear 차속0 조건** — 원격 기어 명령 추종이 "차속 0일 때만".
-   → 주행 중 기어 변경 금지. 데이터 딕셔너리 §5.1 에 미해결로 등재(`TBD_STANDSTILL_SPEED` 연계).
+   → 주행 중 기어 변경 금지. ✅ C05 확정: 임계 차속 `STANDSTILL_SPEED_KPH = 0 kph`(`vehicle_speed <= STANDSTILL_SPEED_KPH`).
 
 ---
 
